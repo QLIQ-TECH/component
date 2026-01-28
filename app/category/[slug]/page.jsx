@@ -158,7 +158,14 @@ export default function CategoryPage() {
   // For /category/[slug] pages, fetch appropriate API based on source
   useEffect(() => {
     if (slug) {
+      // Clear all data immediately when slug or source changes to prevent showing stale data
       setIsStoreSlug(false)
+      setCategoryInfo(null)
+      setStoreId(null)
+      dispatch(clearStoreSlugProducts())
+      dispatch(clearHypermarketProducts())
+      dispatch(clearSupermarketProducts())
+      dispatch(clearStoreProductsByStoreId())
       
       // Check source query parameter to determine which API to call
       if (source === 'hypermarket') {
@@ -353,7 +360,13 @@ export default function CategoryPage() {
     || '/2.jpg'
   
   // Use appropriate categories based on source
+  // Return empty array while loading to prevent showing stale data
   const categoriesToDisplay = (() => {
+    // If loading, return empty array to prevent showing stale categories
+    if (isLoading) {
+      return []
+    }
+    
     if (source === 'hypermarket' && hypermarketLevel2Categories && hypermarketLevel2Categories.length > 0) {
       return hypermarketLevel2Categories.map(transformCategoryData)
     } else if (source === 'supermarket' && supermarketLevel2Categories && supermarketLevel2Categories.length > 0) {

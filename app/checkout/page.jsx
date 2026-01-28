@@ -32,7 +32,10 @@ import {
   setAppliedCoupon,
   clearAppliedCoupon,
   setAppliedGigCompletion,
-  clearAppliedGigCompletion
+  clearAppliedGigCompletion,
+  fetchCountries,
+  fetchCitiesByCountry,
+  fetchZonesByCity
 } from '@/store/slices/checkoutSlice'
 import { fetchProfile } from '@/store/slices/profileSlice'
 import { fetchUserBalance, fetchRedeemableCashBalance } from '@/store/slices/walletSlice'
@@ -44,7 +47,26 @@ import { faHome, faBriefcase, faMapMarkerAlt, faCheck, faPlus, faEdit, faTrash }
 import { useToast } from '@/contexts/ToastContext'
 import styles from './checkout.module.css'
 
-const GOOGLE_API_KEY = ''
+const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY || 'AIzaSyDdZ_Y4ANv6qnyWeBebbWA6YoKqMd-o-4Y'
+
+// Map country names to ISO country codes for Google Places API
+const getCountryCode = (countryName) => {
+  const countryCodeMap = {
+    'United Arab Emirates': 'ae',
+    'UAE': 'ae',
+    'United States': 'us',
+    'USA': 'us',
+    'United Kingdom': 'gb',
+    'UK': 'gb',
+    'India': 'in',
+    'Saudi Arabia': 'sa',
+    'Kuwait': 'kw',
+    'Qatar': 'qa',
+    'Oman': 'om',
+    'Bahrain': 'bh'
+  }
+  return countryCodeMap[countryName] || null
+}
 
 // Load Google Maps API with Places library
 const loadGoogleMaps = () => {
@@ -224,6 +246,9 @@ export default function CheckoutPage() {
   
   // Ref for address section to scroll to
   const addressSectionRef = useRef(null)
+  const addressLine1AutocompleteRef = useRef(null)
+  const autocompleteInstanceRef = useRef(null)
+  const citiesZonesRef = useRef({ cities: [], zones: [] })
   
   // Applied discount state
   const [appliedDiscount, setAppliedDiscount] = useState(null)
@@ -245,6 +270,11 @@ export default function CheckoutPage() {
 
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
   const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false)
+
+  // Country, State, City selection state (for address form)
+  const [selectedCountry, setSelectedCountry] = useState('')
+  const [selectedState, setSelectedState] = useState('')
+  const [selectedCity, setSelectedCity] = useState('')
 
   // Cart state
   const { items: cartItems, total: cartTotal, loading: cartLoading } = useSelector(state => state.cart)
@@ -310,7 +340,13 @@ export default function CheckoutPage() {
     gigCompletions,
     loadingGigCompletions,
     gigCompletionsError,
-    appliedGigCompletion
+    appliedGigCompletion,
+    countries: apiCountries,
+    loadingCountries,
+    cities: apiCities,
+    loadingCities,
+    zones: apiZones,
+    loadingZones
   } = useSelector(state => state.checkout)
 
   // Combine addresses from both sources to ensure we get all available addresses
@@ -635,6 +671,9 @@ export default function CheckoutPage() {
       // Load addresses
       dispatch(fetchUserAddresses())
       
+      // Load countries for address form
+      dispatch(fetchCountries())
+      
       // Load coupons
       dispatch(fetchAcceptedPurchaseGigs())
       
@@ -687,6 +726,43 @@ export default function CheckoutPage() {
     }
   }, [subtotalAfterGigCompletion, cartItems.length, dispatch])
 
+  // Reset country/state/city selections and autocomplete when address form is closed
+  useEffect(() => {
+    if (!showAddressForm && !showShippingForm) {
+      setSelectedCountry('')
+      setSelectedState('')
+      setSelectedCity('')
+      // Clear autocomplete instance when form closes
+      if (autocompleteInstanceRef.current) {
+        window.google?.maps?.event?.clearInstanceListeners(autocompleteInstanceRef.current)
+        if (autocompleteInstanceRef.current._observer) {
+          autocompleteInstanceRef.current._observer.disconnect()
+        }
+        autocompleteInstanceRef.current = null
+      }
+      // Remove any pac-containers
+      const pacContainers = document.querySelectorAll('.pac-container')
+      pacContainers.forEach(container => container.remove())
+    }
+  }, [showAddressForm, showShippingForm])
+
+  // Fetch cities when country is selected
+  useEffect(() => {
+    if (selectedCountry) {
+      dispatch(fetchCitiesByCountry(selectedCountry))
+      setSelectedCity('') // Reset city when country changes
+      setSelectedState('') // Reset zone when country changes
+    }
+  }, [selectedCountry, dispatch])
+
+  // Fetch zones when city is selected
+  useEffect(() => {
+    if (selectedCity) {
+      dispatch(fetchZonesByCity(selectedCity))
+      setSelectedState('') // Reset zone when city changes
+    }
+  }, [selectedCity, dispatch])
+
   // Auto-populate address form with user data when form is shown
   useEffect(() => {
     if (showAddressForm && user) {
@@ -698,11 +774,254 @@ export default function CheckoutPage() {
     }
   }, [showAddressForm, user, dispatch])
 
-  // Load Google Maps API when "Use Current Location" is needed (for reverse geocoding only)
+  // Initialize Google Maps API and Places Autocomplete - runs once when form is shown
   useEffect(() => {
-    // Only load if user clicks "Use Current Location" - not for autocomplete
-    // This prevents Google API errors when just opening the address form
-  }, [])
+    let isMounted = true
+    let observer = null
+
+    const initializeAutocomplete = async () => {
+      // Only initialize if form is shown
+      if (!showAddressForm || !GOOGLE_API_KEY) {
+        return
+      }
+
+      try {
+        // Load Google Maps API if not already loaded
+        if (!googleMapsLoaded) {
+          await loadGoogleMaps()
+          if (!isMounted) return
+          setGoogleMapsLoaded(true)
+        }
+
+        // Verify Google Maps is loaded
+        if (!window.google || !window.google.maps || !window.google.maps.places) {
+          return
+        }
+
+        // Get the input element
+        const addressInput = document.getElementById('address-line-1-autocomplete')
+        if (!addressInput) {
+          return
+        }
+
+        // If autocomplete already exists, just update the country restriction
+        if (autocompleteInstanceRef.current) {
+          // Update component restrictions if country changed
+          if (selectedCountry) {
+            const countryCode = getCountryCode(selectedCountry)
+            if (countryCode) {
+              autocompleteInstanceRef.current.setComponentRestrictions({ country: countryCode })
+            } else {
+              autocompleteInstanceRef.current.setComponentRestrictions({})
+            }
+          } else {
+            autocompleteInstanceRef.current.setComponentRestrictions({})
+          }
+          return
+        }
+
+        // Clean up any existing pac-containers before creating new instance
+        const existingPacContainers = document.querySelectorAll('.pac-container')
+        existingPacContainers.forEach(container => container.remove())
+
+        // Prepare autocomplete options
+        const autocompleteOptions = {
+          types: ['geocode'],
+          fields: ['address_components', 'formatted_address', 'geometry', 'name', 'types']
+        }
+
+        // Add country restriction if country is selected
+        if (selectedCountry) {
+          const countryCode = getCountryCode(selectedCountry)
+          if (countryCode) {
+            autocompleteOptions.componentRestrictions = { country: countryCode }
+          }
+        }
+
+        // Create autocomplete instance
+        const autocomplete = new window.google.maps.places.Autocomplete(addressInput, autocompleteOptions)
+        autocompleteInstanceRef.current = autocomplete
+
+        // Optimized styling function - remove duplicates and style
+        const styleAutocompleteDropdown = () => {
+          const pacContainers = document.querySelectorAll('.pac-container')
+          // Remove all but the last container (most recent one)
+          if (pacContainers.length > 1) {
+            for (let i = 0; i < pacContainers.length - 1; i++) {
+              pacContainers[i].remove()
+            }
+          }
+          // Style the remaining container
+          const pacContainer = document.querySelector('.pac-container')
+          if (pacContainer) {
+            pacContainer.style.zIndex = '10000'
+            pacContainer.style.borderRadius = '8px'
+            pacContainer.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)'
+            pacContainer.style.marginTop = '4px'
+            pacContainer.style.maxHeight = '300px'
+            pacContainer.style.overflowY = 'auto'
+          }
+        }
+
+        // Use a more efficient MutationObserver - only watch for pac-container additions
+        observer = new MutationObserver((mutations) => {
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (node.nodeType === 1) {
+                if (node.classList?.contains('pac-container')) {
+                  styleAutocompleteDropdown()
+                  break
+                } else if (node.querySelector?.('.pac-container')) {
+                  styleAutocompleteDropdown()
+                  break
+                }
+              }
+            }
+          }
+        })
+        
+        // Only observe the input's parent container, not the entire body
+        const inputContainer = addressInput.closest('div') || document.body
+        observer.observe(inputContainer, {
+          childList: true,
+          subtree: true
+        })
+
+        // Store observer for cleanup
+        autocomplete._observer = observer
+
+        // Style dropdown when it opens (debounced)
+        let styleTimeout = null
+        const debouncedStyle = () => {
+          clearTimeout(styleTimeout)
+          styleTimeout = setTimeout(styleAutocompleteDropdown, 10)
+        }
+
+        addressInput.addEventListener('focus', debouncedStyle)
+        addressInput.addEventListener('input', debouncedStyle)
+
+        // Handle place selection
+        autocomplete.addListener('place_changed', () => {
+          const place = autocomplete.getPlace()
+          
+          if (!place.geometry || !place.geometry.location) {
+            return
+          }
+
+          // Extract address components
+          const addressComponents = place.address_components || []
+          let streetNumber = ''
+          let route = ''
+          let city = ''
+          let state = ''
+          let postalCode = ''
+          let country = ''
+
+          addressComponents.forEach(component => {
+            const types = component.types
+            if (types.includes('street_number')) {
+              streetNumber = component.long_name
+            } else if (types.includes('route')) {
+              route = component.long_name
+            } else if (types.includes('locality') || types.includes('administrative_area_level_2')) {
+              city = component.long_name
+            } else if (types.includes('administrative_area_level_1')) {
+              state = component.long_name
+            } else if (types.includes('postal_code')) {
+              postalCode = component.long_name
+            } else if (types.includes('country')) {
+              country = component.long_name
+            }
+          })
+
+          // Use place name for establishments, otherwise use formatted address
+          const addressLine1 = place.name && place.types?.includes('establishment') 
+            ? `${place.name}, ${place.formatted_address}`
+            : place.formatted_address || [streetNumber, route].filter(Boolean).join(' ')
+
+          // Get latitude and longitude
+          const latitude = place.geometry.location.lat()
+          const longitude = place.geometry.location.lng()
+
+          // Log coordinates for debugging
+          console.log('📍 Selected place coordinates:', { latitude, longitude, placeName: place.name || addressLine1 })
+
+          // Update form with extracted data including coordinates
+          dispatch(updateAddressForm({
+            addressLine1: addressLine1,
+            ...(city && { city: city }),
+            ...(state && { state: state }),
+            ...(postalCode && { postalCode: postalCode }),
+            ...(country && { country: country }),
+            latitude: latitude,
+            longitude: longitude
+          }))
+
+          // Update selected city if found - use ref to get latest cities
+          if (city) {
+            const currentCities = citiesZonesRef.current.cities
+            const cityMatch = currentCities.find(c => c.name.toLowerCase() === city.toLowerCase())
+            if (cityMatch) {
+              setSelectedCity(cityMatch.name)
+            }
+          }
+
+          // Update selected zone if found - use ref to get latest zones
+          if (state) {
+            const currentZones = citiesZonesRef.current.zones
+            const zoneMatch = currentZones.find(z => z.name.toLowerCase() === state.toLowerCase())
+            if (zoneMatch) {
+              setSelectedState(zoneMatch.name)
+            }
+          }
+        })
+      } catch (error) {
+        console.error('Error initializing Google Places Autocomplete:', error)
+      }
+    }
+
+    // Initialize with minimal delay
+    const timeoutId = setTimeout(() => {
+      initializeAutocomplete()
+    }, 0)
+
+    // Cleanup function - only runs on unmount or when form closes
+    return () => {
+      isMounted = false
+      clearTimeout(timeoutId)
+      if (autocompleteInstanceRef.current) {
+        window.google?.maps?.event?.clearInstanceListeners(autocompleteInstanceRef.current)
+        // Disconnect observer if it exists
+        if (autocompleteInstanceRef.current._observer) {
+          autocompleteInstanceRef.current._observer.disconnect()
+        }
+        autocompleteInstanceRef.current = null
+      }
+      // Clean up observer if it exists
+      if (observer) {
+        observer.disconnect()
+      }
+      // Remove any pac-containers when form closes
+      const pacContainers = document.querySelectorAll('.pac-container')
+      pacContainers.forEach(container => container.remove())
+    }
+  }, [showAddressForm, GOOGLE_API_KEY, googleMapsLoaded]) // Removed selectedCountry from dependencies
+
+  // Update country restrictions when country changes - separate effect for better performance
+  useEffect(() => {
+    if (autocompleteInstanceRef.current && window.google?.maps?.places) {
+      if (selectedCountry) {
+        const countryCode = getCountryCode(selectedCountry)
+        if (countryCode) {
+          autocompleteInstanceRef.current.setComponentRestrictions({ country: countryCode })
+        } else {
+          autocompleteInstanceRef.current.setComponentRestrictions({})
+        }
+      } else {
+        autocompleteInstanceRef.current.setComponentRestrictions({})
+      }
+    }
+  }, [selectedCountry])
 
   // Ensure a selected address when addresses are available (prefer default)
   useEffect(() => {
@@ -839,9 +1158,50 @@ export default function CheckoutPage() {
     }
   }, [selectedPaymentMethod, selectedAddress, cartItems.length, stripeClientSecret, isCreatingPaymentIntent, paymentIntentError])
 
+  // Use API countries (convert array of strings to array of objects for compatibility)
+  const countries = (apiCountries || []).map(countryName => ({ name: countryName, isoCode: countryName }))
+  
+  // Use API cities (convert array of strings to array of objects for compatibility)
+  const cities = (apiCities || []).map(cityName => ({ name: cityName }))
+  
+  // Use API zones (convert to array of objects with name property)
+  const zones = (apiZones || []).map(zone => ({ name: zone.zoneName, id: zone.id }))
+
+  // Keep refs updated with latest cities and zones for use in autocomplete handler
+  useEffect(() => {
+    citiesZonesRef.current = { cities, zones }
+  }, [cities, zones])
+  
+  // Check if we should show zones dropdown (when city is selected)
+  const shouldShowZonesDropdown = selectedCity && zones.length > 0
+
   // Address form handlers
   const handleAddressFormChange = (field, value) => {
     dispatch(updateAddressForm({ [field]: value }))
+  }
+
+  // Handle country change
+  const handleCountryChange = (e) => {
+    const countryName = e.target.value
+    setSelectedCountry(countryName)
+    setSelectedCity('') // Reset city when country changes
+    setSelectedState('') // Reset zone when country changes
+    
+    dispatch(updateAddressForm({ country: countryName }))
+  }
+
+  const handleCityChange = (e) => {
+    const cityName = e.target.value
+    setSelectedCity(cityName)
+    setSelectedState('') // Reset zone when city changes
+    
+    dispatch(updateAddressForm({ city: cityName }))
+  }
+
+  const handleZoneChange = (e) => {
+    const zoneName = e.target.value
+    setSelectedState(zoneName)
+    dispatch(updateAddressForm({ state: zoneName }))
   }
 
   // Handle "Use Current Location" button click
@@ -927,19 +1287,54 @@ export default function CheckoutPage() {
   const handleAddressSubmit = async (e) => {
     e.preventDefault()
     
+    // Validate required dropdown fields
+    if (!selectedCountry) {
+      showToast('Please select a country', 'error')
+      return
+    }
+    if (!selectedCity) {
+      showToast('Please select a city', 'error')
+      return
+    }
+    if (!selectedState) {
+      showToast('Please select a zone', 'error')
+      return
+    }
+    
     try {
       // Get coordinates from address
-      const coordinates = await getCoordinatesFromAddress(addressForm)
+      const coordinates = await getCoordinatesFromAddress({
+        ...addressForm,
+        country: selectedCountry,
+        city: selectedCity,
+        state: selectedState
+      })
       
       // Prepare address data with coordinates (only if coordinates exist)
       const addressData = {
-        ...addressForm
+        ...addressForm,
+        country: selectedCountry,
+        city: selectedCity,
+        state: selectedState
       }
       
-      // Only add coordinates if they exist
-      if (coordinates && coordinates.latitude && coordinates.longitude) {
+      // Only add coordinates if they exist (prefer form coordinates from autocomplete, fallback to geocoded)
+      if (addressForm.latitude && addressForm.longitude) {
+        addressData.latitude = addressForm.latitude
+        addressData.longitude = addressForm.longitude
+        console.log('✅ Saving address with coordinates from autocomplete:', { 
+          latitude: addressForm.latitude, 
+          longitude: addressForm.longitude 
+        })
+      } else if (coordinates && coordinates.latitude && coordinates.longitude) {
         addressData.latitude = coordinates.latitude
         addressData.longitude = coordinates.longitude
+        console.log('✅ Saving address with coordinates from geocoding:', { 
+          latitude: coordinates.latitude, 
+          longitude: coordinates.longitude 
+        })
+      } else {
+        console.warn('⚠️ No coordinates available for address')
       }
 
       const result = await dispatch(createAddress(addressData))
@@ -947,6 +1342,13 @@ export default function CheckoutPage() {
       // Refetch addresses to ensure we have the latest data
       if (createAddress.fulfilled.match(result)) {
         await dispatch(fetchUserAddresses())
+        // Close the form and reset selections
+        dispatch(setShowAddressForm(false))
+        dispatch(setShowShippingForm(false))
+        setSelectedCountry('')
+        setSelectedState('')
+        setSelectedCity('')
+        showToast('Address saved successfully!', 'success')
       }
     } catch (error) {
       console.error('Error submitting address:', error)
@@ -1869,34 +2271,68 @@ export default function CheckoutPage() {
                     />
                     <select
                       className={styles.addressInput}
-                      value={addressForm.country}
-                      onChange={(e) => handleAddressFormChange('country', e.target.value)}
+                      value={selectedCountry}
+                      onChange={handleCountryChange}
                       required
+                      disabled={loadingCountries}
                     >
-                      <option value="">Country</option>
-                      <option value="AE">UAE</option>
-                      <option value="SA">Saudi Arabia</option>
-                      <option value="KW">Kuwait</option>
-                      <option value="QA">Qatar</option>
+                      <option value="">{loadingCountries ? 'Loading...' : 'Select Country'}</option>
+                      {countries.map((country) => (
+                        <option key={country.isoCode} value={country.name}>
+                          {country.name}
+                        </option>
+                      ))}
                     </select>
-                    <select
+                    {selectedCountry && (
+                      <select
+                        className={styles.addressInput}
+                        value={selectedCity}
+                        onChange={handleCityChange}
+                        disabled={!selectedCountry || loadingCities}
+                        required
+                      >
+                        <option value="">{loadingCities ? 'Loading...' : 'Select City'}</option>
+                        {cities.map((city) => (
+                          <option key={city.name} value={city.name}>
+                            {city.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {shouldShowZonesDropdown && (
+                      <select
+                        className={styles.addressInput}
+                        value={selectedState}
+                        onChange={handleZoneChange}
+                        disabled={!selectedCity || loadingZones}
+                        required
+                      >
+                        <option value="">{loadingZones ? 'Loading...' : 'Select Zone'}</option>
+                        {zones.map((zone) => (
+                          <option key={zone.id} value={zone.name}>
+                            {zone.name}
+                          </option>
+                        ))}
+                        <option value="Other">Other</option>
+                      </select>
+                    )}
+                    <input
+                      id="address-line-1-autocomplete"
+                      ref={addressLine1AutocompleteRef}
                       className={styles.addressInput}
-                      value={addressForm.state}
-                      onChange={(e) => handleAddressFormChange('state', e.target.value)}
+                      placeholder="Search Address (e.g., Latifa Tower)"
+                      value={addressForm.addressLine1}
+                      onChange={(e) => handleAddressFormChange('addressLine1', e.target.value)}
                       required
-                    >
-                      <option value="">State</option>
-                      <option value="Dubai">Dubai</option>
-                      <option value="Abu Dhabi">Abu Dhabi</option>
-                      <option value="Sharjah">Sharjah</option>
-                      <option value="Ajman">Ajman</option>
-                    </select>
+                      autoComplete="off"
+                      style={{ gridColumn: 'span 2' }}
+                    />
                     <input
                       className={styles.addressInput}
-                      placeholder="City"
-                      value={addressForm.city}
-                      onChange={(e) => handleAddressFormChange('city', e.target.value)}
-                      required
+                      placeholder="Address Line 2 (Flat Number, Building Number)"
+                      value={addressForm.addressLine2}
+                      onChange={(e) => handleAddressFormChange('addressLine2', e.target.value)}
+                      style={{ gridColumn: 'span 2' }}
                     />
                     <input
                       className={styles.addressInput}
@@ -1904,19 +2340,6 @@ export default function CheckoutPage() {
                       value={addressForm.postalCode}
                       onChange={(e) => handleAddressFormChange('postalCode', e.target.value)}
                       required
-                    />
-                    <input
-                      className={styles.addressInput}
-                      placeholder="Address Line 1"
-                      value={addressForm.addressLine1}
-                      onChange={(e) => handleAddressFormChange('addressLine1', e.target.value)}
-                      required
-                    />
-                    <input
-                      className={styles.addressInput}
-                      placeholder="Address Line 2"
-                      value={addressForm.addressLine2}
-                      onChange={(e) => handleAddressFormChange('addressLine2', e.target.value)}
                     />
                     <input
                       className={styles.addressInput}
@@ -2056,35 +2479,51 @@ export default function CheckoutPage() {
                     />
                     <select
                       className={styles.addressInput}
-                      value={addressForm.country}
-                      onChange={(e) => handleAddressFormChange('country', e.target.value)}
+                      value={selectedCountry}
+                      onChange={handleCountryChange}
                       required
+                      disabled={loadingCountries}
                     >
-                      <option value="">Country</option>
-                      <option value="AE">UAE</option>
-                      <option value="SA">Saudi Arabia</option>
-                      <option value="KW">Kuwait</option>
-                      <option value="QA">Qatar</option>
+                      <option value="">{loadingCountries ? 'Loading...' : 'Select Country'}</option>
+                      {countries.map((country) => (
+                        <option key={country.isoCode} value={country.name}>
+                          {country.name}
+                        </option>
+                      ))}
                     </select>
-                    <select
-                      className={styles.addressInput}
-                      value={addressForm.state}
-                      onChange={(e) => handleAddressFormChange('state', e.target.value)}
-                      required
-                    >
-                      <option value="">State</option>
-                      <option value="Dubai">Dubai</option>
-                      <option value="Abu Dhabi">Abu Dhabi</option>
-                      <option value="Sharjah">Sharjah</option>
-                      <option value="Ajman">Ajman</option>
-                    </select>
-                    <input
-                      className={styles.addressInput}
-                      placeholder="City"
-                      value={addressForm.city}
-                      onChange={(e) => handleAddressFormChange('city', e.target.value)}
-                      required
-                    />
+                    {selectedCountry && (
+                      <select
+                        className={styles.addressInput}
+                        value={selectedCity}
+                        onChange={handleCityChange}
+                        disabled={!selectedCountry || loadingCities}
+                        required
+                      >
+                        <option value="">{loadingCities ? 'Loading...' : 'Select City'}</option>
+                        {cities.map((city) => (
+                          <option key={city.name} value={city.name}>
+                            {city.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {shouldShowZonesDropdown && (
+                      <select
+                        className={styles.addressInput}
+                        value={selectedState}
+                        onChange={handleZoneChange}
+                        disabled={!selectedCity || loadingZones}
+                        required
+                      >
+                        <option value="">{loadingZones ? 'Loading...' : 'Select Zone'}</option>
+                        {zones.map((zone) => (
+                          <option key={zone.id} value={zone.name}>
+                            {zone.name}
+                          </option>
+                        ))}
+                        <option value="Other">Other</option>
+                      </select>
+                    )}
                     <input
                       className={styles.addressInput}
                       placeholder="Postal Code"

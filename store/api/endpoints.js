@@ -312,6 +312,13 @@ export const delivery = {
   getShippingMethods: `${BASES.delivery}/delivery/shipping/methods`,
 }
 
+export const zones = {
+  base: `${BASES.auth}/zones`,
+  getCountries: `${BASES.auth}/zones/countries`,
+  getCitiesByCountry: (countryName) => `${BASES.auth}/zones/country/${encodeURIComponent(countryName)}/cities`,
+  getZonesByCity: (cityName) => `${BASES.auth}/zones/city/${encodeURIComponent(cityName)}`,
+}
+
 export const settler = {
   base: `${BASES.auth}/settlers`,
   create: `${BASES.auth}/settlers`,

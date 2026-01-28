@@ -312,12 +312,17 @@ export default function BrandPage() {
     return () => clearTimeout(timer)
   }, [selectedFilters])
 
-  // Reset pagination when debounced filters change
+  // Reset pagination and clear stale data when filters or navigation changes
   useEffect(() => {
     setCurrentPage(1)
     setPaginationInfo(null)
     setBrandProducts([])
     isFetchingRef.current = false // Reset fetch lock when filters change
+    
+    // Clear level2Category and brandInfo immediately when slug changes to prevent showing stale data
+    // This ensures no old category data shows when navigating between categories
+    setLevel2Category(null)
+    setBrandInfo(null)
   }, [debouncedFilters, slug, storeId, categoryLevel, source, categoryId])
 
   // Fetch brand/store/category info and products by slug
@@ -338,6 +343,11 @@ export default function BrandPage() {
         // Clear products immediately when starting to fetch new page
         // This ensures old products don't show while new ones are loading
         setBrandProducts([])
+        
+        // Clear level2Category and brandInfo immediately when slug changes
+        // This prevents showing stale category data during navigation
+        setLevel2Category(null)
+        setBrandInfo(null)
 
         // Check if this is a store (has storeId parameter or source parameter), category (has categoryLevel), or a brand
         // If source is present (hypermarket/supermarket), it's definitely a store
@@ -1250,17 +1260,55 @@ export default function BrandPage() {
       const path = []
       path.push({ label: 'Discovery', href: '/' })
 
+      // Helper function to create slug from name
+      const createSlugFromName = (name) => {
+        if (!name) return null
+        return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      }
+
+      // For level2 categories, navigate to category page (shows level4 categories) not product listing
+      // Try to get slug from brandInfo.level2 object
       const level2SlugFromBrand =
         brandInfo?.level2 &&
         typeof brandInfo.level2 !== 'string' &&
         brandInfo.level2?.slug
-          ? `/${brandInfo.level2.slug}`
+          ? `/category/${brandInfo.level2.slug}`
           : null
-      const level2SlugFromState = level2Category?.slug ? `/${level2Category.slug}` : null
-      const level2Href = level2SlugFromBrand || level2SlugFromState || null
+      
+      // Try to get slug from level2Category state
+      const level2SlugFromState = level2Category?.slug ? `/category/${level2Category.slug}` : null
+      
+      // Try to get slug from brandInfo.level2 if it's an object with slug
+      const level2SlugFromBrandObject = 
+        brandInfo?.level2 &&
+        typeof brandInfo.level2 === 'object' &&
+        brandInfo.level2?.slug
+          ? `/category/${brandInfo.level2.slug}`
+          : null
+      
+      // Get level2 name for fallback slug generation
+      let level2NameForSlug = null
+      if (brandInfo?.level2) {
+        if (typeof brandInfo.level2 === 'string') {
+          level2NameForSlug = brandInfo.level2
+        } else if (brandInfo.level2?.name) {
+          level2NameForSlug = brandInfo.level2.name
+        }
+      } else if (level2Category?.name) {
+        level2NameForSlug = level2Category.name
+      } else if (brandInfo?.path?.level2 && Array.isArray(brandInfo.path.level2) && brandInfo.path.level2.length > 0) {
+        level2NameForSlug = brandInfo.path.level2[0]
+      }
+      
+      // Create fallback href from name if we have name but no slug
+      const level2HrefFromName = level2NameForSlug ? `/category/${createSlugFromName(level2NameForSlug)}` : null
+      
+      // Priority: slug from brandInfo.level2 object > slug from level2Category > slug from name
+      const level2Href = level2SlugFromBrand || level2SlugFromState || level2SlugFromBrandObject || level2HrefFromName || null
 
       if (isStore && brandInfo) {
-        if (level2Category?.name) {
+        // Only show level2Category if we're not on a level4 page or if we have proper store data
+        if (level2Category?.name && categoryLevel !== '4') {
           path.push({
             label: level2Category.name,
             href: level2Href
@@ -1274,16 +1322,32 @@ export default function BrandPage() {
         let level2Name = null
         let level4Name = null
 
-        if (brandInfo.path?.level2 && Array.isArray(brandInfo.path.level2) && brandInfo.path.level2.length > 0) {
-          level2Name = brandInfo.path.level2[0]
-        } else if (brandInfo.level2) {
-          if (typeof brandInfo.level2 === 'string') {
-            level2Name = brandInfo.level2
-          } else if (brandInfo.level2?.name) {
-            level2Name = brandInfo.level2.name
+        // For level4 pages, prioritize brandInfo data over stale level2Category
+        if (categoryLevel === '4') {
+          // Only use level2Category if brandInfo doesn't have level2 data
+          if (brandInfo.path?.level2 && Array.isArray(brandInfo.path.level2) && brandInfo.path.level2.length > 0) {
+            level2Name = brandInfo.path.level2[0]
+          } else if (brandInfo.level2) {
+            if (typeof brandInfo.level2 === 'string') {
+              level2Name = brandInfo.level2
+            } else if (brandInfo.level2?.name) {
+              level2Name = brandInfo.level2.name
+            }
           }
-        } else if (level2Category?.name) {
-          level2Name = level2Category.name
+          // Don't use level2Category for level4 pages to avoid showing stale data
+        } else {
+          // For non-level4 pages, use normal logic
+          if (brandInfo.path?.level2 && Array.isArray(brandInfo.path.level2) && brandInfo.path.level2.length > 0) {
+            level2Name = brandInfo.path.level2[0]
+          } else if (brandInfo.level2) {
+            if (typeof brandInfo.level2 === 'string') {
+              level2Name = brandInfo.level2
+            } else if (brandInfo.level2?.name) {
+              level2Name = brandInfo.level2.name
+            }
+          } else if (level2Category?.name) {
+            level2Name = level2Category.name
+          }
         }
 
         if (brandInfo.path?.level4 && Array.isArray(brandInfo.path.level4) && brandInfo.path.level4.length > 0) {
@@ -1299,9 +1363,16 @@ export default function BrandPage() {
         }
 
         if (level2Name) {
+          // Ensure we have a href for level2 - prioritize existing href, otherwise create from level2Name
+          let finalLevel2Href = level2Href
+          // If we don't have a href yet, create one from the level2Name
+          // This handles cases where level2Name comes from brandInfo.path.level2[0] (string array)
+          if (!finalLevel2Href) {
+            finalLevel2Href = `/category/${createSlugFromName(level2Name)}`
+          }
           path.push({
             label: level2Name,
-            href: level2Href
+            href: finalLevel2Href
           })
         }
 
@@ -1319,7 +1390,8 @@ export default function BrandPage() {
           })
         }
       } else if (brandInfo && !isStore && !isCategory) {
-        if (level2Category?.name) {
+        // Only show level2Category if we're not on a level4 page
+        if (level2Category?.name && categoryLevel !== '4') {
           path.push({
             label: level2Category.name,
             href: level2Href
@@ -1337,7 +1409,7 @@ export default function BrandPage() {
     if (brandInfo || isStore || isCategory) {
       buildBreadcrumb()
     }
-  }, [brandInfo, isStore, isCategory, level2Category])
+  }, [brandInfo, isStore, isCategory, level2Category, categoryLevel, slug])
 
   return (
     <main className="home-page">

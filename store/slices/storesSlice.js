@@ -159,6 +159,8 @@ const storesSlice = createSlice({
     bestBundleDeals: [],
     pagination: {},
     loading: false,
+    loadingBestCheapDeals: false,
+    loadingBestBundleDeals: false,
     error: null,
     success: false
   },
@@ -289,34 +291,34 @@ const storesSlice = createSlice({
       })
       // Best Cheap Deals
       .addCase(fetchBestCheapDeals.pending, (state) => {
-        state.loading = true
+        state.loadingBestCheapDeals = true
         state.error = null
       })
       .addCase(fetchBestCheapDeals.fulfilled, (state, action) => {
-        state.loading = false
+        state.loadingBestCheapDeals = false
         const responseData = action.payload?.data || action.payload
         // API now returns stores instead of deals
         state.bestCheapDeals = Array.isArray(responseData?.stores) ? responseData.stores : []
         state.pagination = responseData?.pagination || {}
       })
       .addCase(fetchBestCheapDeals.rejected, (state, action) => {
-        state.loading = false
+        state.loadingBestCheapDeals = false
         state.error = action.payload
       })
       // Best Bundle Deals
       .addCase(fetchBestBundleDeals.pending, (state) => {
-        state.loading = true
+        state.loadingBestBundleDeals = true
         state.error = null
       })
       .addCase(fetchBestBundleDeals.fulfilled, (state, action) => {
-        state.loading = false
+        state.loadingBestBundleDeals = false
         const responseData = action.payload?.data || action.payload
         // API returns stores instead of bundleDeals
         state.bestBundleDeals = Array.isArray(responseData?.stores) ? responseData.stores : []
         state.pagination = responseData?.pagination || {}
       })
       .addCase(fetchBestBundleDeals.rejected, (state, action) => {
-        state.loading = false
+        state.loadingBestBundleDeals = false
         state.error = action.payload
       })
   }

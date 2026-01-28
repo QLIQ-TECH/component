@@ -391,10 +391,11 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                   const progressWidth = rangeTotal > 0 ? ((currentMax - currentMin) / rangeTotal) * 100 : 100;
                   const maxLeft = progressLeft + progressWidth;
 
-                  const showMinTooltip = (hoveredSlider?.key === facet.key && hoveredSlider?.thumb === 'min') || 
-                                         (activeSlider === 'min' && activeSliderDataRef.current?.facetKey === facet.key);
-                  const showMaxTooltip = (hoveredSlider?.key === facet.key && hoveredSlider?.thumb === 'max') || 
-                                         (activeSlider === 'max' && activeSliderDataRef.current?.facetKey === facet.key);
+                  // Show both tooltips when hovering over either slider or when actively dragging
+                  const isHoveringThisRange = hoveredSlider?.key === facet.key;
+                  const isActiveThisRange = activeSliderDataRef.current?.facetKey === facet.key;
+                  const showMinTooltip = isHoveringThisRange || isActiveThisRange;
+                  const showMaxTooltip = isHoveringThisRange || isActiveThisRange;
                   
                   return (
                     <div className="filter-range">
@@ -409,6 +410,8 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                         <div 
                           className="range-slider-wrapper"
                           aria-label="Price range slider"
+                          onMouseEnter={() => setHoveredSlider({ key: facet.key, thumb: 'both' })}
+                          onMouseLeave={() => setHoveredSlider(null)}
                           onMouseDownCapture={(e) => handleTrackPointerDown(e, facet.key, facetMin, facetMax, currentMin, currentMax)}
                           onTouchStartCapture={(e) => handleTrackPointerDown(e, facet.key, facetMin, facetMax, currentMin, currentMax)}
                         >
@@ -422,17 +425,37 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                             ></div>
                           </div>
 
-                          {showMinTooltip && (
-                            <div className="range-tooltip" style={{ left: `${Math.max(0, Math.min(100, progressLeft))}%` }}>
-                              AED {currentMin}
-                            </div>
-                          )}
+                          {showMinTooltip && (() => {
+                            const minPosition = Math.max(0, Math.min(100, progressLeft));
+                            // If tooltip is too close to left edge (< 15%), shift it right
+                            const isLeftEdge = minPosition < 15;
+                            return (
+                              <div 
+                                className={`range-tooltip range-tooltip-min ${isLeftEdge ? 'tooltip-left' : ''}`}
+                                style={{ 
+                                  left: `${minPosition}%`
+                                }}
+                              >
+                                AED {currentMin}
+                              </div>
+                            );
+                          })()}
                           
-                          {showMaxTooltip && (
-                            <div className="range-tooltip" style={{ left: `${Math.max(0, Math.min(100, maxLeft))}%` }}>
-                              AED {currentMax}
-                            </div>
-                          )}
+                          {showMaxTooltip && (() => {
+                            const maxPosition = Math.max(0, Math.min(100, maxLeft));
+                            // If tooltip is too close to right edge (> 85%), shift it left
+                            const isRightEdge = maxPosition > 85;
+                            return (
+                              <div 
+                                className={`range-tooltip range-tooltip-max ${isRightEdge ? 'tooltip-right' : ''}`}
+                                style={{ 
+                                  left: `${maxPosition}%`
+                                }}
+                              >
+                                AED {currentMax}
+                              </div>
+                            );
+                          })()}
 
                           <input
                             type="range"
@@ -448,7 +471,14 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                             onChange={(e) => handleMinSliderInput(facet.key, e.target.value, facetMin, facetMax)}
                             onInput={(e) => handleMinSliderInput(facet.key, e.target.value, facetMin, facetMax)}
                             onMouseEnter={() => setHoveredSlider({ key: facet.key, thumb: 'min' })}
-                            onMouseLeave={() => setHoveredSlider(null)}
+                            onMouseLeave={() => {
+                              // Delay clearing to allow moving to max slider
+                              setTimeout(() => {
+                                if (!document.querySelector(`.range-slider-wrapper[aria-label="Price range slider"]:hover`)) {
+                                  setHoveredSlider(null);
+                                }
+                              }, 50);
+                            }}
                             onMouseDown={(e) => {
                               // Prevent track clicks from jumping the thumb; we handle movement manually
                               e.preventDefault();
@@ -509,7 +539,14 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                             onChange={(e) => handleMaxSliderInput(facet.key, e.target.value, facetMin, facetMax)}
                             onInput={(e) => handleMaxSliderInput(facet.key, e.target.value, facetMin, facetMax)}
                             onMouseEnter={() => setHoveredSlider({ key: facet.key, thumb: 'max' })}
-                            onMouseLeave={() => setHoveredSlider(null)}
+                            onMouseLeave={() => {
+                              // Delay clearing to allow moving to min slider
+                              setTimeout(() => {
+                                if (!document.querySelector(`.range-slider-wrapper[aria-label="Price range slider"]:hover`)) {
+                                  setHoveredSlider(null);
+                                }
+                              }, 50);
+                            }}
                             onMouseDown={(e) => {
                               e.preventDefault();
                               setActiveSlider('max');
@@ -859,27 +896,48 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
         }
         .range-tooltip {
           position: absolute;
-          bottom: 24px;
-          transform: translateX(-50%);
+          top: -36px;
           background: #222;
           color: #fff;
-          padding: 4px 8px;
-          border-radius: 4px;
+          padding: 6px 10px;
+          border-radius: 6px;
           font-size: 12px;
           font-weight: 500;
           white-space: nowrap;
           pointer-events: none;
           z-index: 10;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         }
         .range-tooltip::after {
           content: '';
           position: absolute;
-          top: 100%;
+          bottom: -8px;
           left: 50%;
           margin-left: -4px;
           border-width: 4px;
           border-style: solid;
           border-color: #222 transparent transparent transparent;
+        }
+        .range-tooltip-min {
+          transform: translateX(-50%);
+        }
+        .range-tooltip-min.tooltip-left {
+          transform: translateX(0);
+        }
+        .range-tooltip-min.tooltip-left::after {
+          left: 20px;
+          margin-left: 0;
+        }
+        .range-tooltip-max {
+          transform: translateX(-50%);
+        }
+        .range-tooltip-max.tooltip-right {
+          transform: translateX(-100%);
+        }
+        .range-tooltip-max.tooltip-right::after {
+          left: auto;
+          right: 20px;
+          margin-left: 0;
         }
         .min-slider { 
           z-index: 3; 
