@@ -67,7 +67,7 @@ export default function Home() {
   const bestCashbackSwiperRef = useRef(null)
   const dispatch = useDispatch()
   const router = useRouter()
-  const { hypermarketStores, fastestDeliveryStores, bestCheapDeals, bestBundleDeals, loading, error } = useSelector(state => state.stores)
+  const { hypermarketStores, fastestDeliveryStores, bestCheapDeals, bestBundleDeals, loading, loadingBestCheapDeals, loadingBestBundleDeals, error } = useSelector(state => state.stores)
   const { products, categoryProducts = [], categoryProductsLoading } = useSelector(state => state.products)
   const [userLocation, setUserLocation] = useState(null)
   
@@ -308,7 +308,7 @@ export default function Home() {
             prevDisabled={bestCheapDealsNav.isBeginning}
             nextDisabled={bestCheapDealsNav.isEnd}
           />
-          {loading ? (
+          {loadingBestCheapDeals ? (
             <div style={{ display: 'flex', gap: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
               {[...Array(4)].map((_, index) => (
                 <StoreCardSkeleton key={`skeleton-${index}`} />
@@ -389,7 +389,7 @@ export default function Home() {
             prevDisabled={bestBundlesNav.isBeginning}
             nextDisabled={bestBundlesNav.isEnd}
           />
-          {loading ? (
+          {loadingBestBundleDeals ? (
             <div style={{ display: 'flex', gap: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
               {[...Array(4)].map((_, index) => (
                 <StoreCardSkeleton key={`skeleton-${index}`} />

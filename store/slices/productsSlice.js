@@ -16,7 +16,8 @@ export const fetchProducts = createAsyncThunk(
         return { fromCache: true }
       }
       
-      const response = await fetch(catalog.products)
+      // Add homepage flag for optimization
+      const response = await fetch(`${catalog.products}?homepage=true&limit=10`)
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)

@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { getAuthToken, getUserFromCookies } from '../../utils/userUtils'
-import { addresses, payment, wallet } from '../api/endpoints'
+import { addresses, payment, wallet, zones } from '../api/endpoints'
  
 
 // Async thunks for checkout operations
@@ -347,6 +347,78 @@ export const fetchGigCompletions = createAsyncThunk(
   }
 )
 
+// Fetch countries from zones API
+export const fetchCountries = createAsyncThunk(
+  'checkout/fetchCountries',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await fetch(zones.getCountries, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to fetch countries')
+      }
+
+      const responseData = await response.json()
+      return responseData.data?.countries || []
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch cities by country
+export const fetchCitiesByCountry = createAsyncThunk(
+  'checkout/fetchCitiesByCountry',
+  async (countryName, { rejectWithValue }) => {
+    try {
+      const response = await fetch(zones.getCitiesByCountry(countryName), {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to fetch cities')
+      }
+
+      const responseData = await response.json()
+      return responseData.data?.cities || []
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch zones by city
+export const fetchZonesByCity = createAsyncThunk(
+  'checkout/fetchZonesByCity',
+  async (cityName, { rejectWithValue }) => {
+    try {
+      const response = await fetch(zones.getZonesByCity(cityName), {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to fetch zones')
+      }
+
+      const responseData = await response.json()
+      return responseData.data?.zones || []
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
 const checkoutSlice = createSlice({
   name: 'checkout',
   initialState: {
@@ -418,6 +490,17 @@ const checkoutSlice = createSlice({
     loadingGigCompletions: false,
     gigCompletionsError: null,
     appliedGigCompletion: null,
+    
+    // Zones (Countries, Cities, Zones)
+    countries: [],
+    loadingCountries: false,
+    countriesError: null,
+    cities: [],
+    loadingCities: false,
+    citiesError: null,
+    zones: [],
+    loadingZones: false,
+    zonesError: null,
     
     // General
     loading: false,
@@ -687,6 +770,51 @@ const checkoutSlice = createSlice({
       .addCase(redeemQoyns.rejected, (state, action) => {
         state.qoynValidation.isValidationLoading = false
         state.qoynValidation.validationError = action.payload
+      })
+      
+      // Fetch countries
+      .addCase(fetchCountries.pending, (state) => {
+        state.loadingCountries = true
+        state.countriesError = null
+      })
+      .addCase(fetchCountries.fulfilled, (state, action) => {
+        state.loadingCountries = false
+        state.countries = action.payload || []
+      })
+      .addCase(fetchCountries.rejected, (state, action) => {
+        state.loadingCountries = false
+        state.countriesError = action.payload
+      })
+      
+      // Fetch cities by country
+      .addCase(fetchCitiesByCountry.pending, (state) => {
+        state.loadingCities = true
+        state.citiesError = null
+        state.cities = [] // Clear previous cities
+        state.zones = [] // Clear zones when country changes
+      })
+      .addCase(fetchCitiesByCountry.fulfilled, (state, action) => {
+        state.loadingCities = false
+        state.cities = action.payload || []
+      })
+      .addCase(fetchCitiesByCountry.rejected, (state, action) => {
+        state.loadingCities = false
+        state.citiesError = action.payload
+      })
+      
+      // Fetch zones by city
+      .addCase(fetchZonesByCity.pending, (state) => {
+        state.loadingZones = true
+        state.zonesError = null
+        state.zones = [] // Clear previous zones
+      })
+      .addCase(fetchZonesByCity.fulfilled, (state, action) => {
+        state.loadingZones = false
+        state.zones = action.payload || []
+      })
+      .addCase(fetchZonesByCity.rejected, (state, action) => {
+        state.loadingZones = false
+        state.zonesError = action.payload
       })
   }
 })

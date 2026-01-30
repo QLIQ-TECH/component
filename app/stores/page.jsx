@@ -90,7 +90,7 @@ export default function Home() {
   const fastestDeliverySwiperRef = useRef(null)
   const bestCheapDealsSwiperRef = useRef(null)
   const dispatch = useDispatch()
-  const { generalStores, fastestDeliveryStores, bestCheapDeals, loading, error } = useSelector(state => state.stores)
+  const { generalStores, fastestDeliveryStores, bestCheapDeals, loading, loadingBestCheapDeals, error } = useSelector(state => state.stores)
   const { categoryProducts = [], categoryProductsLoading } = useSelector(state => state.products)
   const router = useRouter()
   const [userLocation, setUserLocation] = useState(null)
@@ -264,7 +264,7 @@ export default function Home() {
             prevDisabled={bestCheapDealsNav.isBeginning}
             nextDisabled={bestCheapDealsNav.isEnd}
           />
-          {loading ? (
+          {loadingBestCheapDeals ? (
             <div style={{ display: 'flex', gap: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
               {[...Array(4)].map((_, index) => (
                 <StoreCardSkeleton key={`skeleton-${index}`} />

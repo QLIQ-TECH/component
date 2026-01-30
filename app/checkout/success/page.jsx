@@ -345,6 +345,127 @@ export default function CheckoutSuccessPage() {
     }
   }
 
+  // Function to create delivery order
+  // const createDeliveryOrder = async (order) => {
+  //   try {
+  //     console.log('🚚 [DELIVERY ORDER] Creating delivery order...')
+      
+  //     if (!order) {
+  //       console.error('❌ [DELIVERY ORDER] Order data is missing')
+  //       return
+  //     }
+
+  //     // Get auth token
+  //     const token = await getAuthToken()
+  //     if (!token) {
+  //       console.error('❌ [DELIVERY ORDER] No auth token available')
+  //       return
+  //     }
+
+  //     // Extract vendor info from items array (use first item's vendor)
+  //     const orderItems = order?.items || []
+  //     if (orderItems.length === 0) {
+  //       console.error('❌ [DELIVERY ORDER] No items found in order')
+  //       return
+  //     }
+
+  //     // Get vendor info from first item
+  //     const firstItem = orderItems[0]
+  //     const vendorId = firstItem?.vendorId || null
+  //     const vendorName = firstItem?.vendorName || 'Unknown Vendor'
+
+  //     if (!vendorId) {
+  //       console.warn('⚠️ [DELIVERY ORDER] Vendor ID not found in order items')
+  //     }
+
+  //     // Get city value for both area and city (they should be the same)
+  //     const deliveryCity = order.deliveryAddress?.city || order.shippingAddress?.city || ''
+      
+  //     // Map order data to delivery API format
+  //     const deliveryOrderData = {
+  //       userId: order.userId || order.cognitoUserId || '',
+  //       cognitoUserId: order.cognitoUserId || order.userId || '',
+  //       vendor: {
+  //         id: vendorId || '',
+  //         name: vendorName
+  //       },
+  //       orderNumber: order.orderNumber || order.orderId || order._id || '',
+  //       items: orderItems.map(item => ({
+  //         productId: item.productId || item._id || '',
+  //         name: item.name || '',
+  //         quantity: item.quantity || 1,
+  //         price: item.price || 0
+  //       })),
+  //       subtotal: order.subtotal || 0,
+  //       tax: order.tax || 0,
+  //       vat: order.vat || 0,
+  //       shippingCost: order.shippingCost || order.shippingMethodCost || 0,
+  //       discount: order.discount || order.couponDiscountAmount || order.qoynsDiscountAmount || 0,
+  //       totalAmount: order.totalAmount || 0,
+  //       currency: order.currency || 'AED',
+  //       paymentStatus: order.paymentStatus || 'paid',
+  //       paymentMethod: order.paymentMethod || 'card',
+  //       zone: deliveryCity,
+  //       shippingAddress: {
+  //         fullName: order.shippingAddress?.fullName || '',
+  //         phone: order.shippingAddress?.phone || '',
+  //         email: order.shippingAddress?.email || '',
+  //         addressLine1: order.shippingAddress?.addressLine1 || '',
+  //         city: order.shippingAddress?.city || '',
+  //         state: order.shippingAddress?.state || '',
+  //         postalCode: order.shippingAddress?.postalCode || '',
+  //         country: order.shippingAddress?.country || ''
+  //       },
+  //       deliveryAddress: {
+  //         fullName: order.deliveryAddress?.fullName || order.shippingAddress?.fullName || '',
+  //         phone: order.deliveryAddress?.phone || order.shippingAddress?.phone || '',
+  //         email: order.deliveryAddress?.email || order.shippingAddress?.email || '',
+  //         addressLine1: order.deliveryAddress?.addressLine1 || order.shippingAddress?.addressLine1 || '',
+  //         area: deliveryCity,
+  //         city: deliveryCity,
+  //         state: order.deliveryAddress?.state || order.shippingAddress?.state || '',
+  //         postalCode: order.deliveryAddress?.postalCode || order.shippingAddress?.postalCode || '',
+  //         country: order.deliveryAddress?.country || order.shippingAddress?.country || ''
+  //       }
+  //     }
+
+  //     console.log('📦 [DELIVERY ORDER] Sending delivery order data:', {
+  //       orderNumber: deliveryOrderData.orderNumber,
+  //       vendor: deliveryOrderData.vendor,
+  //       itemsCount: deliveryOrderData.items.length,
+  //       totalAmount: deliveryOrderData.totalAmount
+  //     })
+
+  //     // Call delivery API
+  //     const deliveryResponse = await fetch('https://backenddelivery.qliq.ae/api/delivery/orders/create', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Authorization': `Bearer ${token}`,
+  //         'Content-Type': 'application/json'
+  //       },
+  //       body: JSON.stringify(deliveryOrderData)
+  //     })
+
+  //     if (!deliveryResponse.ok) {
+  //       const errorText = await deliveryResponse.text()
+  //       console.error('❌ [DELIVERY ORDER] Failed to create delivery order:', deliveryResponse.status, errorText)
+  //       try {
+  //         const errorData = JSON.parse(errorText)
+  //         console.error('❌ [DELIVERY ORDER] Error details:', errorData)
+  //       } catch {
+  //         // Error text is not JSON, already logged
+  //       }
+  //       return
+  //     }
+
+  //     const result = await deliveryResponse.json()
+  //     console.log('✅ [DELIVERY ORDER] Delivery order created successfully:', result)
+  //   } catch (error) {
+  //     console.error('❌ [DELIVERY ORDER] Exception occurred:', error)
+  //     // Don't fail the entire success page if delivery order creation fails
+  //   }
+  // }
+
   // Function to redeem cash wallet
   const redeemCashWallet = async () => {
     try {
@@ -453,15 +574,17 @@ export default function CheckoutSuccessPage() {
                                   ordersData?.data || 
                                   ordersData?.orders ||
                                   []
-                if (ordersList && ordersList.length > 0) {
-                  const latestOrder = ordersList[0]
-                  await notifyGigCompletionPurchase(latestOrder)
+                  if (ordersList && ordersList.length > 0) {
+                    const latestOrder = ordersList[0]
+                    await notifyGigCompletionPurchase(latestOrder)
+                    // Create delivery order after successful order placement
+                    await createDeliveryOrder(latestOrder)
+                  }
                 }
               }
+            } catch (error) {
+              console.error('❌ Error fetching order for gig completion (cash wallet):', error)
             }
-          } catch (error) {
-            console.error('❌ Error fetching order for gig completion (cash wallet):', error)
-          }
           
           return
         }
@@ -522,6 +645,8 @@ export default function CheckoutSuccessPage() {
                     const latestOrder = ordersList[0]
                     // Notify gig completion purchase AFTER order success
                     await notifyGigCompletionPurchase(latestOrder)
+                    // Create delivery order after successful order placement
+                    await createDeliveryOrder(latestOrder)
                   }
                 }
               }
@@ -570,6 +695,8 @@ export default function CheckoutSuccessPage() {
                   if (ordersList && ordersList.length > 0) {
                     const latestOrder = ordersList[0]
                     await notifyGigCompletionPurchase(latestOrder)
+                    // Create delivery order after successful order placement
+                    await createDeliveryOrder(latestOrder)
                   }
                 }
               }
@@ -634,6 +761,8 @@ export default function CheckoutSuccessPage() {
                     const latestOrder = ordersList[0]
                     // Notify gig completion purchase AFTER order success
                     await notifyGigCompletionPurchase(latestOrder)
+                    // Create delivery order after successful order placement
+                    await createDeliveryOrder(latestOrder)
                   }
                 }
               }
@@ -681,6 +810,8 @@ export default function CheckoutSuccessPage() {
                   if (ordersList && ordersList.length > 0) {
                     const latestOrder = ordersList[0]
                     await notifyGigCompletionPurchase(latestOrder)
+                    // Create delivery order after successful order placement
+                    await createDeliveryOrder(latestOrder)
                   }
                 }
               }
