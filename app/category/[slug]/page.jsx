@@ -501,9 +501,9 @@ export default function CategoryPage() {
                 <div className="banner-title">
                   {categoryInfo?.name || hypermarketProducts?.store?.name || supermarketProducts?.store?.name || storeProductsByStoreId?.store?.name || storeSlugProducts?.store?.name || slug?.toUpperCase() || 'CATEGORY'}
                 </div>
-                <div className="banner-desc">
+                {/* <div className="banner-desc">
                   {categoryInfo?.description || hypermarketProducts?.store?.description || supermarketProducts?.store?.description || storeProductsByStoreId?.store?.description || storeSlugProducts?.store?.description || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc vulputate libero et velit interdum, ac aliquet odio mattis.'}
-                </div>
+                </div> */}
               </div>
               {/* <button className="banner-follow-btn">Follow</button> */}
             </div>
