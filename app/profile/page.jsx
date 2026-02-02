@@ -201,7 +201,7 @@ export default function ProfilePage() {
                 Add New Card
               </button>
             )} */}
-            {/* {activeTab === 'qoyns-wallet' || activeTab === 'qoyns-history' || activeTab === 'send-qoyn' ? (
+            {activeTab === 'qoyns-wallet' || activeTab === 'qoyns-history' || activeTab === 'send-qoyn' ? (
               <div className={styles.qoynsActionsRow}>
                 <button
                   className={`${styles.addCardBtn} ${activeTab === 'qoyns-history' ? styles.active : ''}`}
@@ -209,20 +209,8 @@ export default function ProfilePage() {
                 >
                   History
                 </button>
-                <button
-                  className={`${styles.addCardBtn} ${activeTab === 'send-qoyn' ? styles.active : ''}`}
-                  onClick={() => handleTabChange('send-qoyn')}
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ verticalAlign: 'middle' }}>
-                      <circle cx="9" cy="9" r="9" fill="#111" />
-                      <path d="M9 6v6M6 9h6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    Send Qoyn
-                  </span>
-                </button>
               </div>
-            ) : null} */}
+            ) : null}
             {activeTab === 'orders' && (
               <div className={styles.qoynsActionsRow}>
                 <div className={styles.statusDropdownWrapper}>

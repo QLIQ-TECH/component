@@ -636,6 +636,63 @@ const OrderHistoryPage = () => {
     }
   };
 
+  const handleDownloadInvoice = async () => {
+    try {
+      if (!orderData || !orderData._id) {
+        showToast('Order data not available', 'error');
+        return;
+      }
+
+      // Get authentication token
+      const token = await getAuthToken();
+      if (!token) {
+        showToast('Please login to download invoice', 'error');
+        return;
+      }
+
+      // Get order ID
+      const orderId = orderData._id;
+
+      // Construct the API URL
+      const apiUrl = orderEndpoints.downloadInvoice(orderId);
+
+      console.log('Downloading invoice from:', apiUrl);
+
+      // Fetch the PDF
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to download invoice' }));
+        throw new Error(errorData.message || `HTTP error ${response.status}`);
+      }
+
+      // Get the PDF blob
+      const blob = await response.blob();
+
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${orderData.orderNumber}_invoice.pdf`;
+      document.body.appendChild(a);
+      a.click();
+
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      showToast('Invoice downloaded successfully!', 'success');
+    } catch (error) {
+      console.error('Error downloading invoice:', error);
+      showToast(`Error downloading invoice: ${error.message}`, 'error');
+    }
+  };
+
   // Helper functions for formatting
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-GB', {
@@ -1391,7 +1448,10 @@ const OrderHistoryPage = () => {
                 >
                   Buy Again
                 </button>
-                <button className={styles.downloadInvoiceButton}>
+                <button 
+                  className={styles.downloadInvoiceButton}
+                  onClick={handleDownloadInvoice}
+                >
                   Download Invoice
                 </button>
               </div>

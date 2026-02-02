@@ -209,7 +209,41 @@ export const search = {
   storeFilters: (storeId) => `${BASES.search}/search/filters/store?storeId=${encodeURIComponent(storeId)}`,
   // Store products endpoint
   storeProducts: (storeId, params = {}) => {
-    const usp = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([_, v]) => v !== undefined && v !== null)));
+    const usp = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        if (key === 'brand_id') {
+          // Handle brand_id as array (multiple brands)
+          const brandIds = Array.isArray(value) ? value : [value];
+          brandIds.forEach(id => usp.append('brand_id', String(id)));
+        } else if (key === 'attributes') {
+          // Handle nested objects for attributes
+          if (typeof value === 'object' && !Array.isArray(value)) {
+            Object.entries(value).forEach(([attrKey, attrValues]) => {
+              const valuesArray = Array.isArray(attrValues) ? attrValues : [attrValues];
+              valuesArray.forEach(v => {
+                usp.append(`attr_${attrKey}`, String(v));
+              });
+            });
+          }
+        } else if (key === 'specifications') {
+          // Handle nested objects for specifications
+          if (typeof value === 'object' && !Array.isArray(value)) {
+            Object.entries(value).forEach(([specKey, specValues]) => {
+              const valuesArray = Array.isArray(specValues) ? specValues : [specValues];
+              valuesArray.forEach(v => {
+                usp.append(`spec_${specKey}`, String(v));
+              });
+            });
+          }
+        } else if (Array.isArray(value)) {
+          // Handle other array parameters
+          value.forEach(v => usp.append(key, String(v)));
+        } else {
+          usp.append(key, String(value));
+        }
+      }
+    });
     return `${BASES.search}/search/store/${encodeURIComponent(storeId)}/products?${usp.toString()}`;
   },
   // Search filters endpoint
@@ -263,6 +297,7 @@ export const orders = {
   base: `${BASES.cart}/orders`,
   getUserOrders: `${BASES.cart}/orders/user-orders`,
   getOrderById: (orderId) => `${BASES.cart}/orders/${orderId}`,
+  downloadInvoice: (orderId) => `${BASES.cart}/orders/invoice/download?orderId=${orderId}`,
 }
 
 
