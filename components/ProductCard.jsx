@@ -476,7 +476,7 @@ export default function ProductCard({
           flex: 1 0 0;
           color: #000;
           font-family: 'DM Sans', -apple-system, Roboto, Helvetica, sans-serif;
-          font-size: 13px;
+          font-size: 16px;
           font-weight: 600;
           line-height: 140%;
           margin: 0;

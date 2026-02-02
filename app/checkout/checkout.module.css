@@ -354,6 +354,11 @@
   }
 }
 
+.addressInputError {
+  border: 2px solid #ff0000 !important;
+  background-color: #fff5f5 !important;
+}
+
 .addressInput {
   border: 1px solid #555;
   border-radius: 8px;

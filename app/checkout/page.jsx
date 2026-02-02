@@ -243,6 +243,7 @@ export default function CheckoutPage() {
   
   // State to track address validation error
   const [addressValidationError, setAddressValidationError] = useState(false)
+  const [addressFieldErrors, setAddressFieldErrors] = useState({})
   
   // Ref for address section to scroll to
   const addressSectionRef = useRef(null)
@@ -957,12 +958,22 @@ export default function CheckoutPage() {
             longitude: longitude
           }))
 
+          // Clear errors for fields that are auto-populated from autocomplete
+          setAddressFieldErrors(prev => {
+            const updated = { ...prev }
+            if (addressLine1) updated.addressLine1 = false
+            if (postalCode) updated.postalCode = false
+            return updated
+          })
+
           // Update selected city if found - use ref to get latest cities
           if (city) {
             const currentCities = citiesZonesRef.current.cities
             const cityMatch = currentCities.find(c => c.name.toLowerCase() === city.toLowerCase())
             if (cityMatch) {
               setSelectedCity(cityMatch.name)
+              // Clear city error when city is auto-selected
+              setAddressFieldErrors(prev => ({ ...prev, city: false }))
             }
           }
 
@@ -972,7 +983,14 @@ export default function CheckoutPage() {
             const zoneMatch = currentZones.find(z => z.name.toLowerCase() === state.toLowerCase())
             if (zoneMatch) {
               setSelectedState(zoneMatch.name)
+              // Clear state error when state is auto-selected
+              setAddressFieldErrors(prev => ({ ...prev, state: false }))
             }
+          }
+
+          // Clear country error if country is auto-populated
+          if (country) {
+            setAddressFieldErrors(prev => ({ ...prev, country: false }))
           }
         })
       } catch (error) {
@@ -1187,6 +1205,11 @@ export default function CheckoutPage() {
     setSelectedCity('') // Reset city when country changes
     setSelectedState('') // Reset zone when country changes
     
+    // Clear country error when country is selected
+    if (addressFieldErrors.country) {
+      setAddressFieldErrors(prev => ({ ...prev, country: false }))
+    }
+    
     dispatch(updateAddressForm({ country: countryName }))
   }
 
@@ -1195,12 +1218,23 @@ export default function CheckoutPage() {
     setSelectedCity(cityName)
     setSelectedState('') // Reset zone when city changes
     
+    // Clear city error when city is selected
+    if (addressFieldErrors.city) {
+      setAddressFieldErrors(prev => ({ ...prev, city: false }))
+    }
+    
     dispatch(updateAddressForm({ city: cityName }))
   }
 
   const handleZoneChange = (e) => {
     const zoneName = e.target.value
     setSelectedState(zoneName)
+    
+    // Clear state error when state is selected
+    if (addressFieldErrors.state) {
+      setAddressFieldErrors(prev => ({ ...prev, state: false }))
+    }
+    
     dispatch(updateAddressForm({ state: zoneName }))
   }
 
@@ -1287,19 +1321,53 @@ export default function CheckoutPage() {
   const handleAddressSubmit = async (e) => {
     e.preventDefault()
     
-    // Validate required dropdown fields
+    // Validate all required fields and set error states
+    const errors = {}
+    
+    if (!addressForm.fullName || addressForm.fullName.trim() === '') {
+      errors.fullName = true
+    }
+    if (!addressForm.phone || addressForm.phone.trim() === '') {
+      errors.phone = true
+    }
+    if (!addressForm.email || addressForm.email.trim() === '') {
+      errors.email = true
+    }
     if (!selectedCountry) {
-      showToast('Please select a country', 'error')
-      return
+      errors.country = true
     }
     if (!selectedCity) {
-      showToast('Please select a city', 'error')
-      return
+      errors.city = true
     }
     if (!selectedState) {
-      showToast('Please select a zone', 'error')
+      errors.state = true
+    }
+    if (!addressForm.postalCode || addressForm.postalCode.trim() === '') {
+      errors.postalCode = true
+    }
+    if (!addressForm.addressLine1 || addressForm.addressLine1.trim() === '') {
+      errors.addressLine1 = true
+    }
+    
+    // If there are errors, mark ALL required fields as having errors (turn all red)
+    if (Object.keys(errors).length > 0) {
+      // Set all required fields to show error state
+      setAddressFieldErrors({
+        fullName: !addressForm.fullName || addressForm.fullName.trim() === '',
+        phone: !addressForm.phone || addressForm.phone.trim() === '',
+        email: !addressForm.email || addressForm.email.trim() === '',
+        country: !selectedCountry,
+        city: !selectedCity,
+        state: !selectedState,
+        postalCode: !addressForm.postalCode || addressForm.postalCode.trim() === '',
+        addressLine1: !addressForm.addressLine1 || addressForm.addressLine1.trim() === ''
+      })
+      showToast('Please fill in all required fields', 'error')
       return
     }
+    
+    // Clear errors if validation passes
+    setAddressFieldErrors({})
     
     try {
       // Get coordinates from address
@@ -1348,6 +1416,7 @@ export default function CheckoutPage() {
         setSelectedCountry('')
         setSelectedState('')
         setSelectedCity('')
+        setAddressFieldErrors({}) // Clear all field errors on success
         showToast('Address saved successfully!', 'success')
       }
     } catch (error) {
@@ -2248,29 +2317,44 @@ export default function CheckoutPage() {
                   </div>
                   <div className={styles.addressFormGrid}>
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.fullName ? styles.addressInputError : ''}`}
                       placeholder="Full Name"
                       value={addressForm.fullName}
-                      onChange={(e) => handleAddressFormChange('fullName', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('fullName', e.target.value)
+                        if (addressFieldErrors.fullName) {
+                          setAddressFieldErrors(prev => ({ ...prev, fullName: false }))
+                        }
+                      }}
                       required
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.phone ? styles.addressInputError : ''}`}
                       placeholder="Phone"
                       value={addressForm.phone}
-                      onChange={(e) => handleAddressFormChange('phone', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('phone', e.target.value)
+                        if (addressFieldErrors.phone) {
+                          setAddressFieldErrors(prev => ({ ...prev, phone: false }))
+                        }
+                      }}
                       required
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.email ? styles.addressInputError : ''}`}
                       placeholder="Email"
                       type="email"
                       value={addressForm.email}
-                      onChange={(e) => handleAddressFormChange('email', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('email', e.target.value)
+                        if (addressFieldErrors.email) {
+                          setAddressFieldErrors(prev => ({ ...prev, email: false }))
+                        }
+                      }}
                       required
                     />
                     <select
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.country ? styles.addressInputError : ''}`}
                       value={selectedCountry}
                       onChange={handleCountryChange}
                       required
@@ -2283,46 +2367,57 @@ export default function CheckoutPage() {
                         </option>
                       ))}
                     </select>
-                    {selectedCountry && (
-                      <select
-                        className={styles.addressInput}
-                        value={selectedCity}
-                        onChange={handleCityChange}
-                        disabled={!selectedCountry || loadingCities}
-                        required
-                      >
-                        <option value="">{loadingCities ? 'Loading...' : 'Select City'}</option>
-                        {cities.map((city) => (
-                          <option key={city.name} value={city.name}>
-                            {city.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    {shouldShowZonesDropdown && (
-                      <select
-                        className={styles.addressInput}
-                        value={selectedState}
-                        onChange={handleZoneChange}
-                        disabled={!selectedCity || loadingZones}
-                        required
-                      >
-                        <option value="">{loadingZones ? 'Loading...' : 'Select Zone'}</option>
-                        {zones.map((zone) => (
-                          <option key={zone.id} value={zone.name}>
-                            {zone.name}
-                          </option>
-                        ))}
-                        <option value="Other">Other</option>
-                      </select>
-                    )}
+                    <select
+                      className={`${styles.addressInput} ${addressFieldErrors.city ? styles.addressInputError : ''}`}
+                      value={selectedCity}
+                      onChange={(e) => {
+                        handleCityChange(e)
+                        if (addressFieldErrors.city) {
+                          setAddressFieldErrors(prev => ({ ...prev, city: false }))
+                        }
+                      }}
+                      disabled={!selectedCountry || loadingCities}
+                      required
+                    >
+                      <option value="">{loadingCities ? 'Loading...' : selectedCountry ? 'Select City' : 'Select Country First'}</option>
+                      {cities.map((city) => (
+                        <option key={city.name} value={city.name}>
+                          {city.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className={`${styles.addressInput} ${addressFieldErrors.state ? styles.addressInputError : ''}`}
+                      value={selectedState}
+                      onChange={(e) => {
+                        handleZoneChange(e)
+                        if (addressFieldErrors.state) {
+                          setAddressFieldErrors(prev => ({ ...prev, state: false }))
+                        }
+                      }}
+                      disabled={!selectedCity || loadingZones}
+                      required
+                    >
+                      <option value="">{loadingZones ? 'Loading...' : selectedCity ? 'Select Zone' : 'Select City First'}</option>
+                      {zones.map((zone) => (
+                        <option key={zone.id} value={zone.name}>
+                          {zone.name}
+                        </option>
+                      ))}
+                      <option value="Other">Other</option>
+                    </select>
                     <input
                       id="address-line-1-autocomplete"
                       ref={addressLine1AutocompleteRef}
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.addressLine1 ? styles.addressInputError : ''}`}
                       placeholder="Search Address (e.g., Latifa Tower)"
                       value={addressForm.addressLine1}
-                      onChange={(e) => handleAddressFormChange('addressLine1', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('addressLine1', e.target.value)
+                        if (addressFieldErrors.addressLine1) {
+                          setAddressFieldErrors(prev => ({ ...prev, addressLine1: false }))
+                        }
+                      }}
                       required
                       autoComplete="off"
                       style={{ gridColumn: 'span 2' }}
@@ -2335,10 +2430,15 @@ export default function CheckoutPage() {
                       style={{ gridColumn: 'span 2' }}
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.postalCode ? styles.addressInputError : ''}`}
                       placeholder="Postal Code"
                       value={addressForm.postalCode}
-                      onChange={(e) => handleAddressFormChange('postalCode', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('postalCode', e.target.value)
+                        if (addressFieldErrors.postalCode) {
+                          setAddressFieldErrors(prev => ({ ...prev, postalCode: false }))
+                        }
+                      }}
                       required
                     />
                     <input
@@ -2456,31 +2556,51 @@ export default function CheckoutPage() {
                   </div>
                   <div className={styles.addressFormGrid}>
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.fullName ? styles.addressInputError : ''}`}
                       placeholder="Full Name"
                       value={addressForm.fullName}
-                      onChange={(e) => handleAddressFormChange('fullName', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('fullName', e.target.value)
+                        if (addressFieldErrors.fullName) {
+                          setAddressFieldErrors(prev => ({ ...prev, fullName: false }))
+                        }
+                      }}
                       required
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.phone ? styles.addressInputError : ''}`}
                       placeholder="Phone"
                       value={addressForm.phone}
-                      onChange={(e) => handleAddressFormChange('phone', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('phone', e.target.value)
+                        if (addressFieldErrors.phone) {
+                          setAddressFieldErrors(prev => ({ ...prev, phone: false }))
+                        }
+                      }}
                       required
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.email ? styles.addressInputError : ''}`}
                       placeholder="Email"
                       type="email"
                       value={addressForm.email}
-                      onChange={(e) => handleAddressFormChange('email', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('email', e.target.value)
+                        if (addressFieldErrors.email) {
+                          setAddressFieldErrors(prev => ({ ...prev, email: false }))
+                        }
+                      }}
                       required
                     />
                     <select
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.country ? styles.addressInputError : ''}`}
                       value={selectedCountry}
-                      onChange={handleCountryChange}
+                      onChange={(e) => {
+                        handleCountryChange(e)
+                        if (addressFieldErrors.country) {
+                          setAddressFieldErrors(prev => ({ ...prev, country: false }))
+                        }
+                      }}
                       required
                       disabled={loadingCountries}
                     >
@@ -2491,51 +2611,67 @@ export default function CheckoutPage() {
                         </option>
                       ))}
                     </select>
-                    {selectedCountry && (
-                      <select
-                        className={styles.addressInput}
-                        value={selectedCity}
-                        onChange={handleCityChange}
-                        disabled={!selectedCountry || loadingCities}
-                        required
-                      >
-                        <option value="">{loadingCities ? 'Loading...' : 'Select City'}</option>
-                        {cities.map((city) => (
-                          <option key={city.name} value={city.name}>
-                            {city.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    {shouldShowZonesDropdown && (
-                      <select
-                        className={styles.addressInput}
-                        value={selectedState}
-                        onChange={handleZoneChange}
-                        disabled={!selectedCity || loadingZones}
-                        required
-                      >
-                        <option value="">{loadingZones ? 'Loading...' : 'Select Zone'}</option>
-                        {zones.map((zone) => (
-                          <option key={zone.id} value={zone.name}>
-                            {zone.name}
-                          </option>
-                        ))}
-                        <option value="Other">Other</option>
-                      </select>
-                    )}
+                    <select
+                      className={`${styles.addressInput} ${addressFieldErrors.city ? styles.addressInputError : ''}`}
+                      value={selectedCity}
+                      onChange={(e) => {
+                        handleCityChange(e)
+                        if (addressFieldErrors.city) {
+                          setAddressFieldErrors(prev => ({ ...prev, city: false }))
+                        }
+                      }}
+                      disabled={!selectedCountry || loadingCities}
+                      required
+                    >
+                      <option value="">{loadingCities ? 'Loading...' : selectedCountry ? 'Select City' : 'Select Country First'}</option>
+                      {cities.map((city) => (
+                        <option key={city.name} value={city.name}>
+                          {city.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className={`${styles.addressInput} ${addressFieldErrors.state ? styles.addressInputError : ''}`}
+                      value={selectedState}
+                      onChange={(e) => {
+                        handleZoneChange(e)
+                        if (addressFieldErrors.state) {
+                          setAddressFieldErrors(prev => ({ ...prev, state: false }))
+                        }
+                      }}
+                      disabled={!selectedCity || loadingZones}
+                      required
+                    >
+                      <option value="">{loadingZones ? 'Loading...' : selectedCity ? 'Select Zone' : 'Select City First'}</option>
+                      {zones.map((zone) => (
+                        <option key={zone.id} value={zone.name}>
+                          {zone.name}
+                        </option>
+                      ))}
+                      <option value="Other">Other</option>
+                    </select>
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.postalCode ? styles.addressInputError : ''}`}
                       placeholder="Postal Code"
                       value={addressForm.postalCode}
-                      onChange={(e) => handleAddressFormChange('postalCode', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('postalCode', e.target.value)
+                        if (addressFieldErrors.postalCode) {
+                          setAddressFieldErrors(prev => ({ ...prev, postalCode: false }))
+                        }
+                      }}
                       required
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.addressLine1 ? styles.addressInputError : ''}`}
                       placeholder="Address Line 1"
                       value={addressForm.addressLine1}
-                      onChange={(e) => handleAddressFormChange('addressLine1', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('addressLine1', e.target.value)
+                        if (addressFieldErrors.addressLine1) {
+                          setAddressFieldErrors(prev => ({ ...prev, addressLine1: false }))
+                        }
+                      }}
                       required
                     />
                     <input
