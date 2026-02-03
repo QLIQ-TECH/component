@@ -128,7 +128,7 @@ export const createStripePaymentIntent = createAsyncThunk(
           }
         }),
         total: orderData.total,
-        currency: 'usd',
+        currency: 'aed',
         // Include shipping information
         shippingMethodCost: orderData.shippingMethodCost || orderData.shipping || 0,
         shippingCost: orderData.shippingMethodCost || orderData.shipping || 0,

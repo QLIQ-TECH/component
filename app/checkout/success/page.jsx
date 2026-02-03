@@ -192,7 +192,7 @@ export default function CheckoutSuccessPage() {
       // Calculate commission based on product prices only (sum of items), not subtotal which may include VAT
       // Commission should be calculated on the actual product price before any taxes or fees
       const orderItems = order?.items || []
-      const orderCurrency = order?.currency || 'usd'
+      const orderCurrency = order?.currency || 'aed'
       
       // Calculate total product price from items (price × quantity for each item)
       const totalProductPrice = orderItems.reduce((sum, item) => {
