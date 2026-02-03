@@ -38,6 +38,7 @@ export default function NewAddress({ onCancel, onSave }) {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false)
+  const [addressFieldErrors, setAddressFieldErrors] = useState({})
   const addressLine1AutocompleteRef = useRef(null)
   const autocompleteInstanceRef = useRef(null)
   const citiesZonesRef = useRef({ cities: [], zones: [] })
@@ -434,19 +435,53 @@ export default function NewAddress({ onCancel, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     
-    // Validate required dropdown fields
+    // Validate all required fields and set error states
+    const errors = {}
+    
+    if (!formData.fullName || formData.fullName.trim() === '') {
+      errors.fullName = true
+    }
+    if (!formData.phone || formData.phone.trim() === '') {
+      errors.phone = true
+    }
+    if (!formData.email || formData.email.trim() === '') {
+      errors.email = true
+    }
     if (!selectedCountry) {
-      show('Please select a country', 'error')
-      return
+      errors.country = true
     }
     if (!selectedCity) {
-      show('Please select a city', 'error')
-      return
+      errors.city = true
     }
     if (!selectedState) {
-      show('Please select a zone', 'error')
+      errors.state = true
+    }
+    if (!formData.postalCode || formData.postalCode.trim() === '') {
+      errors.postalCode = true
+    }
+    if (!formData.addressLine1 || formData.addressLine1.trim() === '') {
+      errors.addressLine1 = true
+    }
+    
+    // If there are errors, mark ALL required fields as having errors (turn all red)
+    if (Object.keys(errors).length > 0) {
+      // Set all required fields to show error state
+      setAddressFieldErrors({
+        fullName: !formData.fullName || formData.fullName.trim() === '',
+        phone: !formData.phone || formData.phone.trim() === '',
+        email: !formData.email || formData.email.trim() === '',
+        country: !selectedCountry,
+        city: !selectedCity,
+        state: !selectedState,
+        postalCode: !formData.postalCode || formData.postalCode.trim() === '',
+        addressLine1: !formData.addressLine1 || formData.addressLine1.trim() === ''
+      })
+      show('Please fill in all required fields', 'error')
       return
     }
+    
+    // Clear errors if validation passes
+    setAddressFieldErrors({})
     
     setIsSubmitting(true)
 
@@ -512,6 +547,7 @@ export default function NewAddress({ onCancel, onSave }) {
       const result = await dispatch(createAddress(addressData))
       
       if (createAddress.fulfilled.match(result)) {
+        setAddressFieldErrors({}) // Clear all field errors on success
         show('Address added successfully')
         // Refresh profile to get updated addresses
         await dispatch(fetchProfile())
@@ -569,9 +605,14 @@ export default function NewAddress({ onCancel, onSave }) {
         </div>
         <div className={styles.gridRow}>
           <select 
-            className={styles.input}
+            className={`${styles.input} ${addressFieldErrors.country ? styles.inputError : ''}`}
             value={selectedCountry}
-            onChange={handleCountryChange}
+            onChange={(e) => {
+              handleCountryChange(e)
+              if (addressFieldErrors.country) {
+                setAddressFieldErrors(prev => ({ ...prev, country: false }))
+              }
+            }}
             required
             disabled={loadingCountries}
           >
@@ -582,50 +623,61 @@ export default function NewAddress({ onCancel, onSave }) {
               </option>
             ))}
           </select>
-          {selectedCountry && (
           <select 
-            className={styles.input}
+            className={`${styles.input} ${addressFieldErrors.city ? styles.inputError : ''}`}
             value={selectedCity}
-            onChange={handleCityChange}
-              disabled={!selectedCountry || loadingCities}
+            onChange={(e) => {
+              handleCityChange(e)
+              if (addressFieldErrors.city) {
+                setAddressFieldErrors(prev => ({ ...prev, city: false }))
+              }
+            }}
+            disabled={!selectedCountry || loadingCities}
             required
           >
-              <option value="">{loadingCities ? 'Loading...' : 'Select City'}</option>
+            <option value="">{loadingCities ? 'Loading...' : selectedCountry ? 'Select City' : 'Select Country First'}</option>
             {cities.map((city) => (
               <option key={city.name} value={city.name}>
                 {city.name}
               </option>
             ))}
           </select>
-          )}
         </div>
-        {shouldShowZonesDropdown && (
-          <div className={styles.gridRow}>
-            <select 
-              className={styles.input}
-              value={selectedState}
-              onChange={handleZoneChange}
-              disabled={!selectedCity || loadingZones}
-              required
-            >
-              <option value="">{loadingZones ? 'Loading...' : 'Select Area'}</option>
-              {zones.map((zone) => (
-                <option key={zone.id} value={zone.name}>
-                  {zone.name}
-                </option>
-              ))}
-              <option value="Other">Other</option>
-            </select>
-          </div>
-        )}
+        <div className={styles.gridRow}>
+          <select 
+            className={`${styles.input} ${addressFieldErrors.state ? styles.inputError : ''}`}
+            value={selectedState}
+            onChange={(e) => {
+              handleZoneChange(e)
+              if (addressFieldErrors.state) {
+                setAddressFieldErrors(prev => ({ ...prev, state: false }))
+              }
+            }}
+            disabled={!selectedCity || loadingZones}
+            required
+          >
+            <option value="">{loadingZones ? 'Loading...' : selectedCity ? 'Select Area' : 'Select City First'}</option>
+            {zones.map((zone) => (
+              <option key={zone.id} value={zone.name}>
+                {zone.name}
+              </option>
+            ))}
+            <option value="Other">Other</option>
+          </select>
+        </div>
         <div className={styles.fullRow}>
           <input 
             id="new-address-line-1-autocomplete"
             ref={addressLine1AutocompleteRef}
-            className={styles.input} 
+            className={`${styles.input} ${addressFieldErrors.addressLine1 ? styles.inputError : ''}`}
             name="addressLine1"
             value={formData.addressLine1}
-            onChange={handleInputChange}
+            onChange={(e) => {
+              handleInputChange(e)
+              if (addressFieldErrors.addressLine1) {
+                setAddressFieldErrors(prev => ({ ...prev, addressLine1: false }))
+              }
+            }}
             placeholder="Search Address (e.g., Latifa Tower)" 
             required
             autoComplete="off"
@@ -642,10 +694,15 @@ export default function NewAddress({ onCancel, onSave }) {
         </div>
         <div className={styles.gridRow}>
           <input 
-            className={styles.input} 
+            className={`${styles.input} ${addressFieldErrors.postalCode ? styles.inputError : ''}`}
             name="postalCode"
             value={formData.postalCode}
-            onChange={handleInputChange}
+            onChange={(e) => {
+              handleInputChange(e)
+              if (addressFieldErrors.postalCode) {
+                setAddressFieldErrors(prev => ({ ...prev, postalCode: false }))
+              }
+            }}
             placeholder="Postal Code" 
             required
           />
@@ -659,29 +716,44 @@ export default function NewAddress({ onCancel, onSave }) {
         </div>
         <div className={styles.gridRow}>
           <input 
-            className={styles.input} 
+            className={`${styles.input} ${addressFieldErrors.fullName ? styles.inputError : ''}`}
             name="fullName"
             value={formData.fullName}
-            onChange={handleInputChange}
+            onChange={(e) => {
+              handleInputChange(e)
+              if (addressFieldErrors.fullName) {
+                setAddressFieldErrors(prev => ({ ...prev, fullName: false }))
+              }
+            }}
             placeholder="Full Name" 
             required
           />
           <input 
-            className={styles.input} 
+            className={`${styles.input} ${addressFieldErrors.phone ? styles.inputError : ''}`}
             name="phone"
             value={formData.phone}
-            onChange={handleInputChange}
+            onChange={(e) => {
+              handleInputChange(e)
+              if (addressFieldErrors.phone) {
+                setAddressFieldErrors(prev => ({ ...prev, phone: false }))
+              }
+            }}
             placeholder="Phone" 
             required
           />
         </div>
         <div className={styles.gridRow}>
           <input 
-            className={styles.input} 
+            className={`${styles.input} ${addressFieldErrors.email ? styles.inputError : ''}`}
             name="email"
             type="email"
             value={formData.email}
-            onChange={handleInputChange}
+            onChange={(e) => {
+              handleInputChange(e)
+              if (addressFieldErrors.email) {
+                setAddressFieldErrors(prev => ({ ...prev, email: false }))
+              }
+            }}
             placeholder="Email" 
             required
           />

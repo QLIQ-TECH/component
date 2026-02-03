@@ -78,6 +78,11 @@
   width: 100%;
 }
 
+.inputError {
+  border: 2px solid #ff0000 !important;
+  background-color: #fff5f5 !important;
+}
+
 .input {
   flex: 1;
   background: #fff;
