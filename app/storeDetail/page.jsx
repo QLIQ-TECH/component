@@ -170,7 +170,7 @@ export default function StoreDetail() {
                             id={product._id || product.id}
                             slug={product.slug || product._id || product.id}
                             title={product.title || product.name || 'Product'}
-                            price={product.discount_price ? `AED ${product.discount_price}` : product.price ? `AED ${product.price}` : 'AED 0'}
+                            price={(product.discount_price !== undefined && product.discount_price !== null) ? `AED ${product.discount_price}` : (product.price ? `AED ${product.price}` : 'AED 0')}
                             rating={product.average_rating || product.rating || '4.0'}
                             deliveryTime={product.deliveryTime || '30 Min'}
                             image={product.images?.[0]?.url || product.image || '/iphone.jpg'}

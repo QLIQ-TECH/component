@@ -338,6 +338,7 @@ export const wallet = {
   userBalance: `${BASES.wallet}/wallet/qoyn/user-balance`,
   validateRedemption: `${BASES.wallet}/wallet/qoyn/validate-redemption`,
   redeemQoyn: `${BASES.wallet}/wallet/qoyn/redeem`,
+  redeemHistory: `${BASES.wallet}/wallet/qoyn/redeem-history`,
   redeemableCashBalance: `${BASES.wallet}/wallet/cash/redeemable-balance`,
   redeemCash: `${BASES.wallet}/wallet/cash/redeem`,
 }
