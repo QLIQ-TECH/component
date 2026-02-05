@@ -30,7 +30,7 @@ const transformProductData = (apiProduct) => {
   return {
     id: apiProduct._id || apiProduct.slug,
     title: apiProduct.title || 'Product Title',
-    price: `AED ${apiProduct.discount_price || apiProduct.price || '0'}`,
+    price: `AED ${(apiProduct.discount_price !== undefined && apiProduct.discount_price !== null) ? apiProduct.discount_price : (apiProduct.price || '0')}`,
     rating: apiProduct.average_rating?.toString() || '0',
     deliveryTime: '30 Min', // Default delivery time since it's not in API
     image: imageUrl,
@@ -54,10 +54,25 @@ export default function SearchPage() {
   const pageSize = 20
   const productsScrollContainerRef = useRef(null)
 
-  // Reset to page 1 when query or filters change
+  // Reset to page 1 and clear price filter when query changes (price range will be different)
   useEffect(() => {
     setCurrentPage(1)
-  }, [query, debouncedFilters, sortBy])
+    // When query changes, clear price filter since the range will be different
+    if (query) {
+      setSelectedFilters(prev => {
+        const newFilters = { ...prev }
+        if (newFilters.price) {
+          delete newFilters.price
+        }
+        return newFilters
+      })
+    }
+  }, [query])
+  
+  // Reset to page 1 when filters or sort change (but not query)
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedFilters, sortBy])
 
   // Use pagination info from API response (server-side pagination like categories)
   const totalResults = useMemo(() => {
@@ -172,12 +187,49 @@ export default function SearchPage() {
   }, [selectedFilters])
 
   // Fetch filter data when query or debounced filters change
+  // Use a ref to cache filterData by query+filter key to prevent unnecessary resets
+  const filterDataCacheRef = useRef(new Map())
+  const previousQueryRef = useRef(null)
+  
   useEffect(() => {
     const fetchFilterData = async () => {
-      if (!query) return
+      if (!query) {
+        // Only clear filterData if query is actually empty
+        if (query === null || query === '') {
+          setFilterData(null)
+          filterDataCacheRef.current.clear()
+          previousQueryRef.current = null
+        }
+        return
+      }
 
-      try {
+      // Create a cache key from query and filters
+      const filterKey = `${query}-${JSON.stringify(debouncedFilters)}`
+      
+      // Check if query changed - if so, clear old filterData immediately and always fetch new data
+      const queryChanged = previousQueryRef.current !== null && previousQueryRef.current !== query
+      
+      if (queryChanged) {
+        // Query changed - clear old filterData immediately to show loading state
+        setFilterData(null)
         setLoadingFilters(true)
+      }
+      
+      previousQueryRef.current = query
+      
+      // Only use cache if query hasn't changed (i.e., user navigated back or only filters changed)
+      // When query changes, always fetch fresh data
+      if (!queryChanged && filterDataCacheRef.current.has(filterKey)) {
+        const cachedData = filterDataCacheRef.current.get(filterKey)
+        setFilterData(cachedData)
+        return
+      }
+      
+      // Query changed or no cache - fetch new data
+      try {
+        if (!queryChanged) {
+          setLoadingFilters(true)
+        }
         
         // Build filter params
         const params = new URLSearchParams()
@@ -238,8 +290,22 @@ export default function SearchPage() {
         if (response.ok) {
           const data = await response.json()
           if (data.success && data.data) {
-            setFilterData(data.data)
+            // Cache the filterData for this query+filter combination
+            filterDataCacheRef.current.set(filterKey, data.data)
+            // Always update filterData with a new object reference to ensure React detects the change
+            // This ensures price range updates for new search
+            setFilterData({ ...data.data })
+          } else {
+            // If API fails, clear filterData for this query to show empty state
+            setFilterData(null)
+            // Remove from cache if it exists
+            filterDataCacheRef.current.delete(filterKey)
           }
+        } else {
+          // If API fails, clear filterData for this query to show empty state
+          setFilterData(null)
+          // Remove from cache if it exists
+          filterDataCacheRef.current.delete(filterKey)
         }
       } catch (error) {
         console.error('Failed to fetch search filters:', error)
@@ -269,16 +335,24 @@ export default function SearchPage() {
   }, [dispatch, query, debouncedFilters, sortBy, currentPage, pageSize])
 
   // Build facets from filter API response for proper filter display
+  // Always prefer filterData from API over fallback to ensure consistent discounted price display
   const facets = useMemo(() => {
+    // Always use filterData if available - this ensures discounted price is shown correctly
     if (filterData) {
-      return buildFacetsFromSearchFilters(filterData)
+      const builtFacets = buildFacetsFromSearchFilters(filterData)
+      return builtFacets
     }
-    // Fallback to search results if no filter data available
+    // Only use fallback if we truly don't have filterData AND filters are not loading
+    // This prevents showing incorrect price range when navigating back (filterData temporarily null)
+    if (loadingFilters) {
+      return []
+    }
+    // Fallback to search results only if filterData is unavailable and not loading
     if (!Array.isArray(searchResults) || searchResults.length === 0) {
       return []
     }
     return buildFacetsFromProducts(searchResults)
-  }, [filterData, searchResults])
+  }, [filterData, searchResults, loadingFilters, query])
 
   const handleFilterChange = (key, value) => {
     setSelectedFilters(prev => ({ ...prev, [key]: value }))
@@ -360,7 +434,7 @@ export default function SearchPage() {
                           id={product._id || product.id}
                           slug={product.slug || product._id || product.id}
                           title={product.title || product.name || 'Product'}
-                          price={product.price ? `AED ${product.price}` : 'AED 0'}
+                          price={(product.discount_price !== undefined && product.discount_price !== null) ? `AED ${product.discount_price}` : (product.price ? `AED ${product.price}` : 'AED 0')}
                           rating={product.average_rating || product.rating || '4.0'}
                           deliveryTime={product.deliveryTime || '30 Min'}
                           image={product.images?.[0]?.url || product.image || '/iphone.jpg'}

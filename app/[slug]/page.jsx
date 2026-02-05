@@ -22,7 +22,7 @@ const transformProductData = (apiProduct) => {
     id: apiProduct._id,
     slug: apiProduct.slug,
     title: apiProduct.title,
-    price: `AED ${apiProduct.discount_price || apiProduct.price || '0'}`,
+    price: `AED ${(apiProduct.discount_price !== undefined && apiProduct.discount_price !== null) ? apiProduct.discount_price : (apiProduct.price || '0')}`,
     originalPrice: apiProduct.price,
     rating: apiProduct.average_rating || 4.5,
     deliveryTime: "30 Min",
