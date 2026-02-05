@@ -1624,7 +1624,7 @@ export default function CheckoutPage() {
         gigCompletionDiscountAmount: appliedGigCompletion ? gigCompletionDiscountAmount : undefined,
         gigCompletionDiscountPercentage: appliedGigCompletion ? appliedGigCompletion.customerDiscountPercentage : undefined,
         gigCompletionDiscountFixed: appliedGigCompletion ? appliedGigCompletion.customerDiscountFixed : undefined,
-        currency: 'usd',
+        currency: 'aed',
         userId: mongoUserId, // MongoDB user ID
         cognitoUserId: cognitoUserId, // Cognito user ID
         deliveryAddress: selectedAddress, // Include selected delivery address
@@ -1747,7 +1747,7 @@ export default function CheckoutPage() {
           quantity: item.quantity || 1,
           image: item.image || null
         })),
-        currency: 'usd',
+        currency: 'aed',
         total: actualTotal,
         subtotal: originalSubtotal,
         vat: vatAmount,
