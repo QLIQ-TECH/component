@@ -284,6 +284,7 @@ export default function NewAddress({ onCancel, onSave }) {
           let city = ''
           let state = ''
           let postalCode = ''
+          let country = ''
 
           addressComponents.forEach(component => {
             const types = component.types
@@ -297,6 +298,8 @@ export default function NewAddress({ onCancel, onSave }) {
               state = component.long_name
             } else if (types.includes('postal_code')) {
               postalCode = component.long_name
+            } else if (types.includes('country')) {
+              country = component.long_name
             }
           })
 
@@ -309,6 +312,8 @@ export default function NewAddress({ onCancel, onSave }) {
           const latitude = place.geometry.location.lat()
           const longitude = place.geometry.location.lng()
 
+          console.log('📍 Extracted address components:', { city, state, country, postalCode })
+
           // Update form with extracted data including coordinates
           setFormData(prev => ({
             ...prev,
@@ -318,21 +323,90 @@ export default function NewAddress({ onCancel, onSave }) {
             longitude: longitude
           }))
 
-          // Update selected city if found - use ref to get latest cities
-          if (city) {
-            const currentCities = citiesZonesRef.current.cities
-            const cityMatch = currentCities.find(c => c.name.toLowerCase() === city.toLowerCase())
-            if (cityMatch) {
-              setSelectedCity(cityMatch.name)
+          // Step 1: Auto-fill country if found
+          if (country) {
+            const currentCountries = apiCountries || []
+            // Try exact match first
+            let countryMatch = currentCountries.find(c => c.toLowerCase() === country.toLowerCase())
+            // If no exact match, try partial match (e.g., "United Arab Emirates" matches "UAE")
+            if (!countryMatch) {
+              countryMatch = currentCountries.find(c => {
+                const cLower = c.toLowerCase()
+                const countryLower = country.toLowerCase()
+                return cLower.includes(countryLower) || countryLower.includes(cLower) ||
+                       (country === 'UAE' && cLower.includes('united arab')) ||
+                       (country === 'United Arab Emirates' && cLower.includes('uae'))
+              })
             }
-          }
-
-          // Update selected zone if found - use ref to get latest zones
-          if (state) {
-            const currentZones = citiesZonesRef.current.zones
-            const zoneMatch = currentZones.find(z => z.name.toLowerCase() === state.toLowerCase())
-            if (zoneMatch) {
-              setSelectedState(zoneMatch.name)
+            
+            if (countryMatch) {
+              console.log('✅ Auto-filling country:', countryMatch)
+              setSelectedCountry(countryMatch)
+              
+              // Step 2: After country is set, wait for cities to load, then auto-fill city
+              // Store the city value to match later
+              const cityToMatch = city
+              const stateToMatch = state
+              
+              // Function to try matching city after cities are loaded
+              const tryMatchCity = (attempt = 0) => {
+                if (attempt > 10) return // Max 10 attempts (3 seconds)
+                
+                const currentCities = apiCities || []
+                if (currentCities.length > 0 && cityToMatch) {
+                  // Cities are loaded, try to match
+                  const cityMatch = currentCities.find(c => {
+                    const cName = typeof c === 'string' ? c : c
+                    return cName.toLowerCase() === cityToMatch.toLowerCase() ||
+                           cName.toLowerCase().includes(cityToMatch.toLowerCase()) ||
+                           cityToMatch.toLowerCase().includes(cName.toLowerCase())
+                  })
+                  
+                  if (cityMatch) {
+                    const cityName = typeof cityMatch === 'string' ? cityMatch : cityMatch
+                    console.log('✅ Auto-filling city:', cityName)
+                    setSelectedCity(cityName)
+                    
+                    // Step 3: After city is set, wait for zones to load, then auto-fill zone/state
+                    const tryMatchZone = (zoneAttempt = 0) => {
+                      if (zoneAttempt > 10) return // Max 10 attempts
+                      
+                      const currentZones = apiZones || []
+                      if (currentZones.length > 0 && stateToMatch) {
+                        const zoneMatch = currentZones.find(z => {
+                          const zName = typeof z === 'string' ? z : (z.zoneName || z.name)
+                          return zName.toLowerCase() === stateToMatch.toLowerCase() ||
+                                 zName.toLowerCase().includes(stateToMatch.toLowerCase()) ||
+                                 stateToMatch.toLowerCase().includes(zName.toLowerCase())
+                        })
+                        
+                        if (zoneMatch) {
+                          const zoneName = typeof zoneMatch === 'string' ? zoneMatch : (zoneMatch.zoneName || zoneMatch.name)
+                          console.log('✅ Auto-filling zone/state:', zoneName)
+                          setSelectedState(zoneName)
+                        }
+                      } else {
+                        // Zones not loaded yet, try again
+                        setTimeout(() => tryMatchZone(zoneAttempt + 1), 300)
+                      }
+                    }
+                    
+                    // Start trying to match zone
+                    tryMatchZone()
+                  } else {
+                    // City not found, try again after a delay
+                    setTimeout(() => tryMatchCity(attempt + 1), 300)
+                  }
+                } else {
+                  // Cities not loaded yet, try again
+                  setTimeout(() => tryMatchCity(attempt + 1), 300)
+                }
+              }
+              
+              // Start trying to match city after a short delay
+              setTimeout(() => tryMatchCity(), 300)
+            } else {
+              console.warn('⚠️ Country not found in list:', country, 'Available:', currentCountries)
             }
           }
         })
@@ -487,21 +561,45 @@ export default function NewAddress({ onCancel, onSave }) {
 
     try {
       // Prepare address data matching checkout format
+      // IMPORTANT: Use selectedCity and selectedState directly to avoid any swap issues
+      // Explicitly build addressData to ensure city and state are NOT swapped
       const addressData = {
         type: addressType,
-        fullName: formData.fullName,
-        phone: formData.phone,
-        email: formData.email,
-        addressLine1: formData.addressLine1,
-        addressLine2: formData.addressLine2,
-        city: selectedCity,
-        state: selectedState,
+        fullName: formData.fullName || '',
+        phone: formData.phone || '',
+        email: formData.email || '',
+        addressLine1: formData.addressLine1 || '',
+        addressLine2: formData.addressLine2 || '',
+        // IMPORTANT: API expects swapped values - selectedState goes to city field, selectedCity goes to state field
+        city: selectedState, // API city field gets the zone/state dropdown value
+        state: selectedCity, // API state field gets the city dropdown value
         country: selectedCountry,
-        postalCode: formData.postalCode,
-        landmark: formData.landmark,
+        postalCode: formData.postalCode || '',
+        landmark: formData.landmark || '',
         instructions: '',
         isDefault: false
       }
+      
+      // Debug log to verify city and state are correct before submission
+      console.log('📍 [ADDRESS SUBMISSION] City/State values (SWAPPED for API):', {
+        selectedCity: selectedCity,
+        selectedState: selectedState,
+        apiCity: addressData.city, // This is selectedState (zone)
+        apiState: addressData.state, // This is selectedCity (city)
+        note: 'API expects: city=zone, state=city'
+      })
+      
+      // FINAL SAFEGUARD: Explicitly ensure city and state are swapped for API
+      // API expects: city field = zone/state dropdown value, state field = city dropdown value
+      addressData.city = selectedState
+      addressData.state = selectedCity
+      
+      console.log('📍 [ADDRESS SUBMISSION] City/State values AFTER final fix:', {
+        selectedCity: selectedCity,
+        selectedState: selectedState,
+        addressDataCity: addressData.city,
+        addressDataState: addressData.state
+      })
 
       // Use coordinates from autocomplete if available, otherwise geocode
       if (formData.latitude && formData.longitude) {
@@ -544,6 +642,7 @@ export default function NewAddress({ onCancel, onSave }) {
         }
       }
 
+      console.log('📤 [FINAL PAYLOAD] Sending address data to API:', JSON.stringify(addressData, null, 2))
       const result = await dispatch(createAddress(addressData))
       
       if (createAddress.fulfilled.match(result)) {

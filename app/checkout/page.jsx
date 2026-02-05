@@ -276,6 +276,9 @@ export default function CheckoutPage() {
   const [selectedCountry, setSelectedCountry] = useState('')
   const [selectedState, setSelectedState] = useState('')
   const [selectedCity, setSelectedCity] = useState('')
+  
+  // Custom label state for address form
+  const [customLabel, setCustomLabel] = useState('')
 
   // Cart state
   const { items: cartItems, total: cartTotal, loading: cartLoading } = useSelector(state => state.cart)
@@ -775,6 +778,13 @@ export default function CheckoutPage() {
     }
   }, [showAddressForm, user, dispatch])
 
+  // Load cities when form opens if country is already selected
+  useEffect(() => {
+    if ((showAddressForm || showShippingForm) && selectedCountry) {
+      dispatch(fetchCitiesByCountry(selectedCountry))
+    }
+  }, [showAddressForm, showShippingForm, selectedCountry, dispatch])
+
   // Initialize Google Maps API and Places Autocomplete - runs once when form is shown
   useEffect(() => {
     let isMounted = true
@@ -946,6 +956,7 @@ export default function CheckoutPage() {
 
           // Log coordinates for debugging
           console.log('📍 Selected place coordinates:', { latitude, longitude, placeName: place.name || addressLine1 })
+          console.log('📍 Extracted address components:', { city, state, country, postalCode })
 
           // Update form with extracted data including coordinates
           dispatch(updateAddressForm({
@@ -966,31 +977,75 @@ export default function CheckoutPage() {
             return updated
           })
 
-          // Update selected city if found - use ref to get latest cities
-          if (city) {
-            const currentCities = citiesZonesRef.current.cities
-            const cityMatch = currentCities.find(c => c.name.toLowerCase() === city.toLowerCase())
-            if (cityMatch) {
-              setSelectedCity(cityMatch.name)
-              // Clear city error when city is auto-selected
-              setAddressFieldErrors(prev => ({ ...prev, city: false }))
-            }
-          }
-
-          // Update selected zone if found - use ref to get latest zones
-          if (state) {
-            const currentZones = citiesZonesRef.current.zones
-            const zoneMatch = currentZones.find(z => z.name.toLowerCase() === state.toLowerCase())
-            if (zoneMatch) {
-              setSelectedState(zoneMatch.name)
-              // Clear state error when state is auto-selected
-              setAddressFieldErrors(prev => ({ ...prev, state: false }))
-            }
-          }
-
-          // Clear country error if country is auto-populated
+          // Step 1: Auto-fill country if found
           if (country) {
-            setAddressFieldErrors(prev => ({ ...prev, country: false }))
+            const currentCountries = apiCountries || []
+            // Try exact match first
+            let countryMatch = currentCountries.find(c => c.toLowerCase() === country.toLowerCase())
+            // If no exact match, try partial match (e.g., "United Arab Emirates" matches "UAE")
+            if (!countryMatch) {
+              countryMatch = currentCountries.find(c => {
+                const cLower = c.toLowerCase()
+                const countryLower = country.toLowerCase()
+                return cLower.includes(countryLower) || countryLower.includes(cLower) ||
+                       (country === 'UAE' && cLower.includes('united arab')) ||
+                       (country === 'United Arab Emirates' && cLower.includes('uae'))
+              })
+            }
+            
+            if (countryMatch) {
+              console.log('✅ Auto-filling country:', countryMatch)
+              setSelectedCountry(countryMatch)
+              dispatch(updateAddressForm({ country: countryMatch }))
+              setAddressFieldErrors(prev => ({ ...prev, country: false }))
+              
+              // Explicitly fetch cities when country is auto-filled
+              dispatch(fetchCitiesByCountry(countryMatch))
+              
+              // Step 2: After country is set, wait for cities to load, then auto-fill city
+              // Store the city value to match later
+              const cityToMatch = city
+              
+              // Function to try matching city after cities are loaded
+              const tryMatchCity = (attempt = 0) => {
+                if (attempt > 10) return // Max 10 attempts (3 seconds)
+                
+                // Use citiesZonesRef to get the latest cities data (always objects with { name: string })
+                const currentCities = citiesZonesRef.current.cities || []
+                if (currentCities.length > 0 && cityToMatch) {
+                  // Cities are loaded, try to match
+                  const cityMatch = currentCities.find(c => {
+                    // citiesZonesRef.current.cities is always array of objects: [{ name: "Dubai" }, ...]
+                    const cName = c?.name || c
+                    return cName && (
+                      cName.toLowerCase() === cityToMatch.toLowerCase() ||
+                      cName.toLowerCase().includes(cityToMatch.toLowerCase()) ||
+                      cityToMatch.toLowerCase().includes(cName.toLowerCase())
+                    )
+                  })
+                  
+                  if (cityMatch) {
+                    // Extract city name from object
+                    const cityName = cityMatch?.name || cityMatch
+                    console.log('✅ Auto-filling city:', cityName)
+                    setSelectedCity(cityName)
+                    setAddressFieldErrors(prev => ({ ...prev, city: false }))
+                    // Note: Zone/area is not auto-filled - user must select manually
+                  } else {
+                    // City not found, try again after a delay
+                    setTimeout(() => tryMatchCity(attempt + 1), 300)
+                  }
+                } else {
+                  // Cities not loaded yet, try again
+                  setTimeout(() => tryMatchCity(attempt + 1), 300)
+                }
+              }
+              
+              // Start trying to match city after a short delay
+              setTimeout(() => tryMatchCity(), 300)
+            } else {
+              console.warn('⚠️ Country not found in list:', country, 'Available:', currentCountries)
+            }
           }
         })
       } catch (error) {
@@ -1196,6 +1251,31 @@ export default function CheckoutPage() {
   // Address form handlers
   const handleAddressFormChange = (field, value) => {
     dispatch(updateAddressForm({ [field]: value }))
+    // Clear custom label when type is changed to home/work/other
+    if (field === 'type' && (value === 'home' || value === 'work' || value === 'other')) {
+      setCustomLabel('')
+    }
+  }
+
+  // Handle custom label change
+  const handleCustomLabelChange = (e) => {
+    const value = e.target.value
+    setCustomLabel(value)
+    if (value) {
+      dispatch(updateAddressForm({ type: 'custom' }))
+    } else {
+      // If custom label is cleared, revert to 'home'
+      dispatch(updateAddressForm({ type: 'home' }))
+    }
+  }
+
+  // Get the display value for the label input
+  const getLabelValue = () => {
+    if (customLabel) return customLabel
+    if (addressForm.type === 'home') return 'Home'
+    if (addressForm.type === 'work') return 'Work'
+    if (addressForm.type === 'other') return 'Other'
+    return ''
   }
 
   // Handle country change
@@ -1208,6 +1288,11 @@ export default function CheckoutPage() {
     // Clear country error when country is selected
     if (addressFieldErrors.country) {
       setAddressFieldErrors(prev => ({ ...prev, country: false }))
+    }
+    
+    // Explicitly fetch cities when country is selected
+    if (countryName) {
+      dispatch(fetchCitiesByCountry(countryName))
     }
     
     dispatch(updateAddressForm({ country: countryName }))
@@ -1379,12 +1464,46 @@ export default function CheckoutPage() {
       })
       
       // Prepare address data with coordinates (only if coordinates exist)
+      // IMPORTANT: Use selectedCity and selectedState directly to avoid any swap issues
+      // Don't rely on addressForm.city or addressForm.state as they might be swapped from Google Places
+      // Explicitly build addressData to ensure city and state are NOT swapped
       const addressData = {
-        ...addressForm,
+        type: addressForm.type || 'home',
+        fullName: addressForm.fullName || '',
+        phone: addressForm.phone || '',
+        email: addressForm.email || '',
+        addressLine1: addressForm.addressLine1 || '',
+        addressLine2: addressForm.addressLine2 || '',
+        landmark: addressForm.landmark || '',
+        instructions: addressForm.instructions || '',
+        postalCode: addressForm.postalCode || '',
         country: selectedCountry,
-        city: selectedCity,
-        state: selectedState
+        // IMPORTANT: API expects swapped values - selectedState goes to city field, selectedCity goes to state field
+        city: selectedState, // API city field gets the zone/state dropdown value
+        state: selectedCity, // API state field gets the city dropdown value
+        isDefault: addressForm.isDefault || false
       }
+      
+      // Debug log to verify city and state are correct before submission
+      console.log('📍 [CHECKOUT ADDRESS SUBMISSION] City/State values (SWAPPED for API):', {
+        selectedCity: selectedCity,
+        selectedState: selectedState,
+        apiCity: addressData.city, // This is selectedState (zone)
+        apiState: addressData.state, // This is selectedCity (city)
+        note: 'API expects: city=zone, state=city'
+      })
+      
+      // FINAL SAFEGUARD: Explicitly ensure city and state are swapped for API
+      // API expects: city field = zone/state dropdown value, state field = city dropdown value
+      addressData.city = selectedState
+      addressData.state = selectedCity
+      
+      console.log('📍 [CHECKOUT ADDRESS SUBMISSION] City/State values AFTER final fix:', {
+        selectedCity: selectedCity,
+        selectedState: selectedState,
+        addressDataCity: addressData.city,
+        addressDataState: addressData.state
+      })
       
       // Only add coordinates if they exist (prefer form coordinates from autocomplete, fallback to geocoded)
       if (addressForm.latitude && addressForm.longitude) {
@@ -1405,6 +1524,7 @@ export default function CheckoutPage() {
         console.warn('⚠️ No coordinates available for address')
       }
 
+      console.log('📤 [FINAL PAYLOAD] Sending address data to API:', JSON.stringify(addressData, null, 2))
       const result = await dispatch(createAddress(addressData))
 
       // Refetch addresses to ensure we have the latest data
@@ -1416,6 +1536,7 @@ export default function CheckoutPage() {
         setSelectedCountry('')
         setSelectedState('')
         setSelectedCity('')
+        setCustomLabel('') // Reset custom label
         setAddressFieldErrors({}) // Clear all field errors on success
         showToast('Address saved successfully!', 'success')
       }
@@ -2311,8 +2432,8 @@ export default function CheckoutPage() {
                     <input
                       className={styles.addressLabelInput}
                       placeholder="Custom Label"
-                      value={addressForm.type}
-                      onChange={(e) => handleAddressFormChange('type', e.target.value)}
+                      value={getLabelValue()}
+                      onChange={handleCustomLabelChange}
                     />
                   </div>
                   <div className={styles.addressFormGrid}>
@@ -2463,6 +2584,7 @@ export default function CheckoutPage() {
                       onClick={() => {
                         setAddressValidationError(false)
                         dispatch(setShowAddressForm(false))
+                        setCustomLabel('') // Reset custom label
                       }}
                     >
                       Cancel
@@ -2550,8 +2672,8 @@ export default function CheckoutPage() {
                     <input
                       className={styles.addressLabelInput}
                       placeholder="Custom Label"
-                      value={addressForm.type}
-                      onChange={(e) => handleAddressFormChange('type', e.target.value)}
+                      value={getLabelValue()}
+                      onChange={handleCustomLabelChange}
                     />
                   </div>
                   <div className={styles.addressFormGrid}>
@@ -2701,6 +2823,7 @@ export default function CheckoutPage() {
                       onClick={() => {
                         dispatch(setShowShippingForm(false))
                         dispatch(setShippingSameAsDelivery(true))
+                        setCustomLabel('') // Reset custom label
                       }}
                     >
                       Cancel

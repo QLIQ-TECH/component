@@ -41,7 +41,7 @@ const transformProductData = (apiProduct) => {
   return {
     id: apiProduct._id || apiProduct.slug,
     title: apiProduct.title || 'Product Title',
-    price: `AED ${apiProduct.discount_price || apiProduct.price || '0'}`,
+    price: `AED ${(apiProduct.discount_price !== undefined && apiProduct.discount_price !== null) ? apiProduct.discount_price : (apiProduct.price || '0')}`,
     rating: apiProduct.average_rating?.toString() || '0',
     deliveryTime: '30 Min', // Default delivery time since it's not in API
     image: imageUrl,
