@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { getAuthToken, getUserFromCookies } from '../../utils/userUtils'
-import { addresses, payment, wallet, zones } from '../api/endpoints'
+import { addresses, payment, wallet, zones, delivery, orders, gigs } from '../api/endpoints'
  
 
 // Async thunks for checkout operations
@@ -295,7 +295,7 @@ export const fetchAcceptedPurchaseGigs = createAsyncThunk(
         throw new Error('Authentication required')
       }
 
-      const response = await fetch('https://backendgigs.qliq.ae/api/gig-completions/accepted-purchase-gigs', {
+      const response = await fetch(gigs.acceptedPurchaseGigs, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -326,7 +326,7 @@ export const fetchGigCompletions = createAsyncThunk(
         throw new Error('Authentication required')
       }
 
-      const response = await fetch('https://backendgigs.qliq.ae/api/gig-completions/accepted-purchase-gigs', {
+      const response = await fetch(gigs.acceptedPurchaseGigs, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -413,6 +413,248 @@ export const fetchZonesByCity = createAsyncThunk(
 
       const responseData = await response.json()
       return responseData.data?.zones || []
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch shipping methods by address (lat/lng, city, etc.)
+export const fetchShippingMethods = createAsyncThunk(
+  'checkout/fetchShippingMethods',
+  async (params, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const searchParams = new URLSearchParams({
+        latitude: String(params.latitude),
+        longitude: String(params.longitude),
+        ...(params.city && { city: params.city }),
+        ...(params.state && { state: params.state }),
+        ...(params.country && { country: params.country }),
+        ...(params.postalCode && { postalCode: params.postalCode })
+      })
+      const response = await fetch(`${delivery.getShippingMethods}?${searchParams.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch shipping methods')
+      }
+      const data = await response.json()
+      return data.data?.shippingMethods || []
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Create Stripe hosted checkout session (redirect flow)
+export const createStripeHostedCheckoutSession = createAsyncThunk(
+  'checkout/createStripeHostedCheckoutSession',
+  async (body, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const res = await fetch(payment.stripeHostedCheckout, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `Checkout failed: ${res.status}`)
+      }
+      const json = await res.json()
+      return json.data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Cash wallet checkout
+export const createCashWalletCheckout = createAsyncThunk(
+  'checkout/createCashWalletCheckout',
+  async (checkoutPayload, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const response = await fetch(payment.cashWalletCheckout, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(checkoutPayload)
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        try {
+          const errorData = JSON.parse(errorText)
+          throw new Error(errorData.message || 'Failed to process cash wallet payment.')
+        } catch (e) {
+          if (e.message && e.message.startsWith('Failed to process')) throw e
+          throw new Error('Failed to process cash wallet payment. Please try again.')
+        }
+      }
+      return await response.json()
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Redeem cash wallet (after order success)
+export const redeemCash = createAsyncThunk(
+  'checkout/redeemCash',
+  async (payload, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const response = await fetch(wallet.redeemCash, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ amountInAed: payload.amountInAed })
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to redeem cash')
+      }
+      return await response.json()
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch user orders (for success page / gig completion)
+export const fetchUserOrders = createAsyncThunk(
+  'checkout/fetchUserOrders',
+  async (params, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const { page = 1, limit = 10 } = params || {}
+      const response = await fetch(`${orders.getUserOrders}?page=${page}&limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to fetch orders')
+      }
+      const data = await response.json()
+      return data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Confirm Stripe session (success page)
+export const confirmStripeSession = createAsyncThunk(
+  'checkout/confirmStripeSession',
+  async (sessionId, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const response = await fetch(payment.stripeConfirmSession(sessionId), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Failed to confirm payment session')
+      }
+      const responseData = await response.json()
+      return responseData.data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Confirm Stripe payment intent (success page)
+export const confirmStripePaymentIntent = createAsyncThunk(
+  'checkout/confirmStripePaymentIntent',
+  async (paymentIntentId, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const response = await fetch(payment.stripeConfirm(paymentIntentId), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Failed to confirm payment')
+      }
+      const responseData = await response.json()
+      return responseData.data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Notify gig completion purchase (success page)
+export const notifyGigCompletionPurchase = createAsyncThunk(
+  'checkout/notifyGigCompletionPurchase',
+  async (payload, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const { orderId, couponCode, influencerCommission } = payload
+      const response = await fetch(gigs.purchase, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          orderId,
+          couponCode,
+          influencerCommission
+        })
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to notify gig completion purchase')
+      }
+      return await response.json()
     } catch (error) {
       return rejectWithValue(error.message)
     }
