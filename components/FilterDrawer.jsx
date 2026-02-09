@@ -25,10 +25,33 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
       
       facets.forEach(facet => {
         if (facet.type === 'range' && facet.min !== undefined && facet.max !== undefined) {
-          // Only set if not already set (preserve initial global bounds)
-          if (!next[facet.key]) {
+          const existing = next[facet.key];
+          
+          // If no cached bounds exist, set them
+          if (!existing) {
             next[facet.key] = { min: facet.min, max: facet.max };
             changed = true;
+          } else {
+            // If cached bounds exist, check if the new bounds are significantly different
+            // This indicates a new search query rather than just a filter adjustment
+            const minDiff = Math.abs(existing.min - facet.min);
+            const maxDiff = Math.abs(existing.max - facet.max);
+            const rangeSize = Math.max(existing.max - existing.min, 1); // Avoid division by zero
+            const minDiffPercent = (minDiff / rangeSize) * 100;
+            const maxDiffPercent = (maxDiff / rangeSize) * 100;
+            
+            // If min or max changed by more than 15% of the original range, it's likely a new search
+            // Also update if the new range extends beyond the cached range (new products added)
+            // Or if ranges don't overlap at all (completely different search)
+            const rangesOverlap = !(facet.min > existing.max || facet.max < existing.min);
+            const isSignificantChange = minDiffPercent > 15 || maxDiffPercent > 15 ||
+                                       !rangesOverlap ||
+                                       (facet.min < existing.min && facet.max > existing.max);
+            
+            if (isSignificantChange) {
+              next[facet.key] = { min: facet.min, max: facet.max };
+              changed = true;
+            }
           }
         }
       });
@@ -254,7 +277,33 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
   }
 
   // Sync local price range with selected filters when they change externally
+  // Also clear local price range when facets change significantly (new search query)
   useEffect(() => {
+    // Check if price facet bounds changed significantly
+    const priceFacet = facets.find(f => f.key === 'price' && f.type === 'range');
+    if (priceFacet && priceFacet.min !== undefined && priceFacet.max !== undefined) {
+      const cachedPrice = cachedFacetBounds['price'];
+      if (cachedPrice) {
+        const minDiff = Math.abs(cachedPrice.min - priceFacet.min);
+        const maxDiff = Math.abs(cachedPrice.max - priceFacet.max);
+        const rangeSize = cachedPrice.max - cachedPrice.min;
+        const minDiffPercent = rangeSize > 0 ? (minDiff / rangeSize) * 100 : 0;
+        const maxDiffPercent = rangeSize > 0 ? (maxDiff / rangeSize) * 100 : 0;
+        
+        // If bounds changed significantly, clear local price range
+        if (minDiffPercent > 20 || maxDiffPercent > 20 ||
+            priceFacet.min < cachedPrice.min || priceFacet.max > cachedPrice.max ||
+            (priceFacet.min > cachedPrice.max) || (priceFacet.max < cachedPrice.min)) {
+          setLocalPriceRange(prev => {
+            const newLocal = { ...prev };
+            delete newLocal['price'];
+            return newLocal;
+          });
+        }
+      }
+    }
+    
+    // Sync with selected filters
     setLocalPriceRange(prev => {
       const newLocal = { ...prev };
       Object.keys(selected).forEach(key => {
@@ -264,7 +313,7 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
       });
       return newLocal;
     });
-  }, [selected]);
+  }, [selected, facets, cachedFacetBounds]);
 
   if (!open) return null;
 
@@ -377,9 +426,26 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                 )}
                 {facet.type === 'range' && (() => {
                   // Use cached bounds if available to maintain stable slider scale, otherwise fallback to current facet props
+                  // However, if cached bounds are significantly different from facet values (new search), use facet values
                   const cached = cachedFacetBounds[facet.key] || {};
-                  const facetMin = cached.min ?? facet.min ?? 0;
-                  const facetMax = cached.max ?? facet.max ?? 1000;
+                  const cachedMin = cached.min ?? null;
+                  const cachedMax = cached.max ?? null;
+                  
+                  // Check if cached bounds are significantly different from current facet values
+                  let useCached = false;
+                  if (cachedMin !== null && cachedMax !== null && facet.min !== undefined && facet.max !== undefined) {
+                    const rangesOverlap = !(facet.min > cachedMax || facet.max < cachedMin);
+                    const rangeSize = Math.max(cachedMax - cachedMin, 1);
+                    const minDiffPercent = (Math.abs(cachedMin - facet.min) / rangeSize) * 100;
+                    const maxDiffPercent = (Math.abs(cachedMax - facet.max) / rangeSize) * 100;
+                    
+                    // Use cached bounds only if ranges overlap and changes are small (filtering, not new search)
+                    useCached = rangesOverlap && minDiffPercent <= 15 && maxDiffPercent <= 15;
+                  }
+                  
+                  // Use cached bounds for stable slider scale during filtering, but use facet values for new searches
+                  const facetMin = useCached ? cachedMin : (facet.min ?? 0);
+                  const facetMax = useCached ? cachedMax : (facet.max ?? 1000);
                   
                   const currentRange = localPriceRange[facet.key] || selected[facet.key] || {};
                   const currentMin = currentRange.min ?? facetMin;
