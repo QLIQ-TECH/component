@@ -146,22 +146,21 @@ export const fetchStoreLevel2Categories = createAsyncThunk(
   }
 )
 
-// Async thunk for fetching category children
+// Async thunk for fetching category children (supports page & limit for load-more in slider)
 export const fetchCategoryChildren = createAsyncThunk(
   'categories/fetchCategoryChildren',
-  async (slug, { rejectWithValue }) => {
+  async (payload, { rejectWithValue }) => {
     try {
-      const url = catalog.categoryChildren(slug)
-      console.log('Fetching category children from:', url)
+      const slug = typeof payload === 'string' ? payload : payload?.slug
+      const page = typeof payload === 'object' && payload?.page != null ? payload.page : 1
+      const limit = typeof payload === 'object' && payload?.limit != null ? payload.limit : 10
+      const url = catalog.categoryChildren(slug, { page, limit })
       const response = await fetch(url)
-      
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
-      
       const data = await response.json()
-      console.log('Category children API response:', data)
-      return data
+      return { ...data, _page: page, _limit: limit }
     } catch (error) {
       console.error('Error fetching category children:', error)
       return rejectWithValue(error.message)
@@ -294,24 +293,44 @@ const categoriesSlice = createSlice({
         state.error = action.payload
         state.success = false
       })
-      // Category Children
-      .addCase(fetchCategoryChildren.pending, (state) => {
-        state.loading = true
-        state.error = null
-        state.success = false
+      // Category Children (page 1 = full replace; page > 1 = append level4Categories for slider load-more)
+      .addCase(fetchCategoryChildren.pending, (state, action) => {
+        const page = typeof action.meta?.arg === 'object' && action.meta.arg?.page != null ? action.meta.arg.page : 1
+        if (page === 1) {
+          state.loading = true
+          state.error = null
+          state.success = false
+        }
       })
       .addCase(fetchCategoryChildren.fulfilled, (state, action) => {
-        state.loading = false
+        const payload = action.payload
+        const page = payload?._page ?? 1
+        if (page === 1) {
+          state.loading = false
+          state.categoryChildren = payload
+        } else if (state.categoryChildren?.data && payload?.data?.level4Categories) {
+          // Append next page of level4 categories for slider
+          const existing = state.categoryChildren.data.level4Categories || []
+          state.categoryChildren = {
+            ...state.categoryChildren,
+            data: {
+              ...state.categoryChildren.data,
+              level4Categories: [...existing, ...payload.data.level4Categories],
+              pagination: payload.data.pagination
+            },
+            _page: page
+          }
+        }
         state.success = true
-        // Store the entire response data
-        state.categoryChildren = action.payload
-        console.log('Category children set in state:', action.payload)
         state.error = null
       })
       .addCase(fetchCategoryChildren.rejected, (state, action) => {
-        state.loading = false
-        state.error = action.payload
-        state.success = false
+        const page = typeof action.meta?.arg === 'object' && action.meta.arg?.page != null ? action.meta.arg.page : 1
+        if (page === 1) {
+          state.loading = false
+          state.error = action.payload
+          state.success = false
+        }
       })
       // Hypermarket Level 2 Categories
       .addCase(fetchHypermarketLevel2Categories.pending, (state) => {

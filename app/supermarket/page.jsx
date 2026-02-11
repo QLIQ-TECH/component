@@ -135,7 +135,7 @@ export default function Home() {
   useEffect(() => {
     dispatch(fetchSupermarketStores())
     dispatch(fetchProducts())
-    dispatch(fetchProductsByCategory({ categoryId: supermarketCategoryId, limit: 200 }))
+    dispatch(fetchProductsByCategory({ categoryId: supermarketCategoryId, limit: 210 }))
   }, [dispatch])
 
   // Fetch fastest delivery stores and deals when location is available
@@ -146,8 +146,8 @@ export default function Home() {
         longitude: userLocation.longitude,
         storeType: 'supermarket'
       }))
-      dispatch(fetchBestCheapDeals({ storeType: 'supermarket', page: 1, limit: 20 }))
-      dispatch(fetchBestBundleDeals({ storeType: 'supermarket', page: 1, limit: 20 }))
+      dispatch(fetchBestCheapDeals({ storeType: 'supermarket', page: 1, limit: 21 }))
+      dispatch(fetchBestBundleDeals({ storeType: 'supermarket', page: 1, limit: 21 }))
     }
   }, [userLocation, dispatch])
 

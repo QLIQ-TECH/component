@@ -140,7 +140,11 @@ export const catalog = {
   hypermarketLevel2Categories: `${BASES.catalog}/categories/hypermarket/level2`,
   supermarketLevel2Categories: `${BASES.catalog}/categories/supermarket/level2`,
   storeLevel2Categories: `${BASES.catalog}/categories/store/level2`,
-  categoryChildren: (slug) => `${BASES.catalog}/categories/level2/${slug}/children`,
+  categoryChildren: (slug, params = {}) => {
+    const { page = 1, limit = 10 } = params;
+    const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+    return `${BASES.catalog}/categories/level2/${encodeURIComponent(slug)}/children?${q.toString()}`;
+  },
   categoryBySlug: (slug) => `${BASES.catalog}/categories/slug/${slug}`,
   searchProducts: (query) => `${BASES.catalog}/search/products?q=${encodeURIComponent(query)}`,
   homepageSections: (params = {}) => {

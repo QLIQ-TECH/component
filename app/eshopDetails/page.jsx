@@ -48,7 +48,7 @@ const productData = [
 export default function EshopDetails() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const pageSize = 20
+  const pageSize = 21
 
   const products = useMemo(() => productData.concat(productData), [])
 

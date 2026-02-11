@@ -94,6 +94,7 @@ export default function CategoryPage() {
   const source = searchParams?.get('source') || null
 
   const { categoryChildren, hypermarketLevel2Categories, supermarketLevel2Categories, storeLevel2Categories, loading, error } = useSelector(state => state.categories)
+  const loadingMoreCategories = useRef(false)
   const { 
     storeSlugProducts, 
     storeSlugProductsLoading, 
@@ -235,12 +236,12 @@ export default function CategoryPage() {
         // Also fetch store level2 categories
         dispatch(fetchStoreLevel2Categories())
       } else {
-        // From discovery page or no source - call category children API (default behavior)
-        dispatch(fetchCategoryChildren(slug))
-        // Also fetch hypermarket and supermarket level 2 categories for the "Other Categories" section
+        // From discovery page or no source - also fetch hypermarket and supermarket level 2 categories
         dispatch(fetchHypermarketLevel2Categories())
         dispatch(fetchSupermarketLevel2Categories())
       }
+      // Fetch all category children in one go (limit 50) so 11th, 12th etc. display immediately in slider
+      dispatch(fetchCategoryChildren({ slug, page: 1, limit: 50 }))
     }
 
     // Cleanup on unmount
@@ -288,6 +289,18 @@ export default function CategoryPage() {
       setCategoryInfo(categoryChildren.data.category)
     }
   }, [categoryChildren, isStoreSlug])
+
+  // Clear load-more lock when category children pagination updates (so we can fetch next page again)
+  useEffect(() => {
+    if (categoryChildren?.data?.pagination) {
+      loadingMoreCategories.current = false
+    }
+  }, [categoryChildren?.data?.pagination?.page])
+
+  // Reset load-more ref when slug changes so new category can load more pages
+  useEffect(() => {
+    loadingMoreCategories.current = false
+  }, [slug])
 
   // Transform API data - prioritize hypermarket, then supermarket, then store products, then store slug, then category children
   const getProductsForSection = (sectionName) => {
@@ -489,7 +502,7 @@ export default function CategoryPage() {
               className="banner-content"
               style={{
                 backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0.00) 0%, rgba(0, 0, 0, 0.60) 100%), url('${storeBannerImage}')`,
-                backgroundSize: 'cover',
+                backgroundSize: 'contain',
                 backgroundPosition: 'center',
                 backgroundRepeat: 'no-repeat'
               }}
@@ -542,9 +555,23 @@ export default function CategoryPage() {
               freeMode={true}
               onSlideChange={(swiper) => {
                 setOtherCategoriesNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                // Load more only when category has 50+ children and user slides near end
+                const useCategoryChildren = !source || !['hypermarket', 'supermarket', 'store'].includes(source)
+                const pagination = categoryChildren?.data?.pagination
+                if (useCategoryChildren && categoryChildren?.data?.level4Categories && pagination?.hasNext && !loadingMoreCategories.current && swiper.activeIndex >= 40) {
+                  loadingMoreCategories.current = true
+                  dispatch(fetchCategoryChildren({ slug, page: (pagination.page ?? 1) + 1, limit: 50 }))
+                }
               }}
               onReachEnd={(swiper) => {
                 setOtherCategoriesNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                // Load next page only when category has 50+ children
+                const useCategoryChildren = !source || !['hypermarket', 'supermarket', 'store'].includes(source)
+                const pagination = categoryChildren?.data?.pagination
+                if (useCategoryChildren && categoryChildren?.data?.level4Categories && pagination?.hasNext && !loadingMoreCategories.current) {
+                  loadingMoreCategories.current = true
+                  dispatch(fetchCategoryChildren({ slug, page: (pagination.page ?? 1) + 1, limit: 50 }))
+                }
               }}
               onReachBeginning={(swiper) => {
                 setOtherCategoriesNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
@@ -555,7 +582,7 @@ export default function CategoryPage() {
               className="other-categories-swiper"
             >
               {transformedCategories.map((category, index) => (
-                <SwiperSlide key={category.name || index} style={{ width: 'auto' }}>
+                <SwiperSlide key={category.id || category.slug || category.name || index} style={{ width: 'auto' }}>
                   <CategoryCard {...category} onClick={() => handleCategoryClick(category)} />
                 </SwiperSlide>
               ))}
@@ -611,7 +638,7 @@ export default function CategoryPage() {
                 setBestsellersNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
               }}
             >
-              {(transformedBestsellers.length > 0 ? transformedBestsellers : allStoreProducts.slice(0, 20)).map((product, index) => (
+              {(transformedBestsellers.length > 0 ? transformedBestsellers : allStoreProducts.slice(0, 21)).map((product, index) => (
                 <SwiperSlide key={product.id || index} style={{ width: 'auto' }}>
                   <ProductCard {...product} />
                 </SwiperSlide>
@@ -711,7 +738,7 @@ export default function CategoryPage() {
                 setOffersNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
               }}
             >
-              {(transformedOffers.length > 0 ? transformedOffers : allStoreProducts.slice(20, 40)).map((product, index) => (
+              {(transformedOffers.length > 0 ? transformedOffers : allStoreProducts.slice(21, 42)).map((product, index) => (
                 <SwiperSlide key={product.id || index} style={{ width: 'auto' }}>
                   <ProductCard {...product} />
                 </SwiperSlide>

@@ -55,7 +55,7 @@ export default function StoreDetail() {
   const storeId = useMemo(() => searchParams.get('storeId'), [searchParams])
   const dispatch = useDispatch()
   const { storeProducts, loading, error, storePagination } = useSelector(state => state.products)
-  const limit = 20
+  const limit = 21
 
   // Reset state whenever the store changes and on unmount
   useEffect(() => {

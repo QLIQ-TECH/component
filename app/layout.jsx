@@ -1,8 +1,16 @@
 import './globals.css'
+import { DM_Sans } from 'next/font/google'
 import { AuthProvider } from '../contexts/AuthContext'
 import { ReduxProvider } from '../store/ReduxProvider'
 import { ToastProvider } from '../contexts/ToastContext'
 import ClientWrapper from '../components/ClientWrapper'
+
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-dm-sans',
+  display: 'swap',
+})
 
 export const metadata = {
   title: 'IQLIQ - Marketplace',
@@ -21,17 +29,11 @@ export default function RootLayout({
   children,
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${dmSans.variable} ${dmSans.className}`}>
       <head>
         <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="shortcut icon" href="/favicon.png" type="image/png" />
         <link rel="apple-touch-icon" href="/favicon.png" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link rel="preload" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" as="style" onLoad="this.onload=null;this.rel='stylesheet'" />
-        <noscript>
-          <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet" />
-        </noscript>
       </head>
       <body>
         <ReduxProvider>

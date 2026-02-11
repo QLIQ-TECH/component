@@ -51,7 +51,7 @@ export default function SearchPage() {
   
   const { searchResults, searchQuery, searchLoading, searchError, searchPagination } = useSelector(state => state.products)
   const [currentPage, setCurrentPage] = useState(1)
-  const pageSize = 20
+  const pageSize = 21
   const productsScrollContainerRef = useRef(null)
 
   // Reset to page 1 and clear price filter when query changes (price range will be different)
