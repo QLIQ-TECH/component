@@ -34,7 +34,7 @@ export const fetchProducts = createAsyncThunk(
 // Async thunk for fetching store products with pagination
 export const fetchStoreProducts = createAsyncThunk(
   'products/fetchStoreProducts',
-  async ({ storeId, page = 1, limit = 20 } = {}, { rejectWithValue }) => {
+  async ({ storeId, page = 1, limit = 21 } = {}, { rejectWithValue }) => {
     try {
       const response = await fetch(search.storeProducts(storeId, { page, limit }))
 
@@ -72,7 +72,7 @@ export const fetchProductsByStoreSlug = createAsyncThunk(
 // Async thunk for fetching hypermarket products
 export const fetchHypermarketProducts = createAsyncThunk(
   'products/fetchHypermarketProducts',
-  async ({ storeId, limit = 20 } = {}, { rejectWithValue }) => {
+  async ({ storeId, limit = 21 } = {}, { rejectWithValue }) => {
     try {
       const response = await fetch(catalog.hypermarketProducts(storeId, { limit }))
 
@@ -91,7 +91,7 @@ export const fetchHypermarketProducts = createAsyncThunk(
 // Async thunk for fetching supermarket products
 export const fetchSupermarketProducts = createAsyncThunk(
   'products/fetchSupermarketProducts',
-  async ({ storeId, limit = 20 } = {}, { rejectWithValue }) => {
+  async ({ storeId, limit = 21 } = {}, { rejectWithValue }) => {
     try {
       const response = await fetch(catalog.supermarketProducts(storeId, { limit }))
 
@@ -110,7 +110,7 @@ export const fetchSupermarketProducts = createAsyncThunk(
 // Async thunk for fetching store products
 export const fetchStoreProductsByStoreId = createAsyncThunk(
   'products/fetchStoreProductsByStoreId',
-  async ({ storeId, limit = 20 } = {}, { rejectWithValue }) => {
+  async ({ storeId, limit = 21 } = {}, { rejectWithValue }) => {
     try {
       const response = await fetch(catalog.storeProducts(storeId, { limit }))
 
@@ -129,7 +129,7 @@ export const fetchStoreProductsByStoreId = createAsyncThunk(
 // Async thunk for searching products with filters
 export const searchProducts = createAsyncThunk(
   'products/searchProducts',
-  async ({ query, filters = {}, sort = 'relevance', page = 1, limit = 20 }, { rejectWithValue }) => {
+  async ({ query, filters = {}, sort = 'relevance', page = 1, limit = 21 }, { rejectWithValue }) => {
     try {
       console.log('Searching for:', query, 'with filters:', filters, 'page:', page, 'limit:', limit)
       

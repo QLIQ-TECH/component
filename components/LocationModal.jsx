@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 
-const GOOGLE_API_KEY = ''
+const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY || ''
 
 export default function LocationModal({ open, onClose, onLocationSelect }) {
   const [currentLocation, setCurrentLocation] = useState('')
@@ -15,11 +15,12 @@ export default function LocationModal({ open, onClose, onLocationSelect }) {
   const mapInstanceRef = useRef(null)
   const markerRef = useRef(null)
 
+  // Preload Maps API on mount so it's ready when user opens modal and grants permission
   useEffect(() => {
-    if (open) {
+    if (GOOGLE_API_KEY) {
       loadGoogleMaps()
     }
-  }, [open])
+  }, [])
 
   useEffect(() => {
     if (mapLoaded && open && permissionGranted && coordinates) {
@@ -28,31 +29,38 @@ export default function LocationModal({ open, onClose, onLocationSelect }) {
   }, [mapLoaded, open, permissionGranted, coordinates])
 
   const loadGoogleMaps = () => {
-    // Check if Google Maps is already loaded
-    if (window.google && window.google.maps) {
-      setMapLoaded(true)
+    // Only need 'maps' (Map + Marker). Skip 'places' – not used here, saves a lot of load time.
+    const finishLoad = () => {
+      if (!window.google?.maps?.importLibrary) return
+      window.google.maps.importLibrary('maps')
+        .then(() => setMapLoaded(true))
+        .catch((err) => {
+          console.error('Failed to load Google Maps', err)
+          setMapLoaded(false)
+        })
+    }
+
+    if (window.google?.maps?.importLibrary) {
+      finishLoad()
       return
     }
 
-    // Check if script is already being loaded
-    if (document.querySelector(`script[src*="maps.googleapis.com"]`)) {
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]')
+    if (existingScript) {
       const checkLoaded = setInterval(() => {
-        if (window.google && window.google.maps) {
-          setMapLoaded(true)
+        if (window.google?.maps?.importLibrary) {
           clearInterval(checkLoaded)
+          finishLoad()
         }
       }, 100)
       return
     }
 
-    // Load Google Maps script
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&libraries=places`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&loading=async`
     script.async = true
     script.defer = true
-    script.onload = () => {
-      setMapLoaded(true)
-    }
+    script.onload = () => finishLoad()
     script.onerror = () => {
       console.error('Failed to load Google Maps')
       setMapLoaded(false)
@@ -204,6 +212,24 @@ export default function LocationModal({ open, onClose, onLocationSelect }) {
   }
 
   if (!open) return null
+
+  if (!GOOGLE_API_KEY) {
+    return (
+      <div className="location-modal-overlay">
+        <div className="location-modal">
+          <button className="location-modal-close" onClick={onClose}>
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+              <circle cx="14" cy="14" r="14" fill="#F5F5F5" />
+              <path d="M9 9L19 19M19 9L9 19" stroke="#000" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+          </button>
+          <div className="location-modal-content">
+            <p className="location-api-error">Location services are not configured. Please set NEXT_PUBLIC_GOOGLE_API_KEY in your environment.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="location-modal-overlay">
@@ -360,6 +386,13 @@ export default function LocationModal({ open, onClose, onLocationSelect }) {
           font-size: 24px;
           font-weight: 600;
           color: #000;
+          margin: 0;
+        }
+        
+        .location-api-error {
+          padding: 24px;
+          color: #666;
+          font-size: 14px;
           margin: 0;
         }
         
