@@ -140,7 +140,11 @@ export const catalog = {
   hypermarketLevel2Categories: `${BASES.catalog}/categories/hypermarket/level2`,
   supermarketLevel2Categories: `${BASES.catalog}/categories/supermarket/level2`,
   storeLevel2Categories: `${BASES.catalog}/categories/store/level2`,
-  categoryChildren: (slug) => `${BASES.catalog}/categories/level2/${slug}/children`,
+  categoryChildren: (slug, params = {}) => {
+    const { page = 1, limit = 10 } = params;
+    const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+    return `${BASES.catalog}/categories/level2/${encodeURIComponent(slug)}/children?${q.toString()}`;
+  },
   categoryBySlug: (slug) => `${BASES.catalog}/categories/slug/${slug}`,
   searchProducts: (query) => `${BASES.catalog}/search/products?q=${encodeURIComponent(query)}`,
   homepageSections: (params = {}) => {
@@ -283,7 +287,8 @@ export const payment = {
   base: BASES.payment,
   stripeCheckout: `${BASES.payment}/payment/stripe/checkout`,
   stripeHostedCheckout: `${BASES.payment}/payment/stripe/hosted-checkout`,
-  cashWalletCheckout: `${BASES.payment}/payment/cash-wallet/checkout`,
+  // Cash wallet checkout: full payment via wallet - always use cart backend
+  cashWalletCheckout: `${BASES.cart}/payment/cash-wallet/checkout`,
   stripeConfirmSession: (sessionId) => `${BASES.payment}/payment/stripe/confirm-session/${sessionId}`,
   stripeConfirm: (paymentIntentId) => `${BASES.payment}/payment/stripe/confirm/${paymentIntentId}`,
 }

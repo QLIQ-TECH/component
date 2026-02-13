@@ -63,14 +63,14 @@ export function buildFacetsFromStoreFilters(filterData) {
   //   }
   // }
 
-  // Brands (which brands are available in this store)
+  // Brands (which brands are available in this store) - use _id as value so API receives brand_id correctly
   if (filterData.brands && Array.isArray(filterData.brands) && filterData.brands.length > 0) {
     facets.push({
       key: 'brand',
       label: 'Brand',
       type: 'checkbox',
       options: filterData.brands.map(b => ({
-        value: b.name || b._id,
+        value: b._id || b.id || b.name,
         label: b.name || 'Unknown',
         count: b.count || 0
       }))

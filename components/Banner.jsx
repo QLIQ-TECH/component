@@ -92,7 +92,7 @@ export default function Banner({
           cursor: pointer;
           color: #000;
           text-align: center;
-          font-family: Inter, -apple-system, Roboto, Helvetica, sans-serif;
+          font-family: 'DM Sans', -apple-system, Roboto, Helvetica, sans-serif;
           font-size: 16px;
           font-weight: 500;
           line-height: 150%;

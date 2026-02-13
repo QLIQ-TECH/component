@@ -1126,7 +1126,7 @@ export default function Home() {
         {/* Banner 3 */}
         <Banner
           title="Make dollars online while in the UAE"
-          description="QLIQ helps you earn $$$ every month in form of Qoyns by doing small gigs offered by influencers and brands. You can start today!"
+          description="IQLIQ helps you earn $$$ every month in form of Qoyns by doing small gigs offered by influencers and brands. You can start today!"
           buttonText="Learn more"
           backgroundImage="2.jpg"
           onButtonClick={handleBannerClick}

@@ -159,7 +159,7 @@ export default function Home() {
         longitude: userLocation.longitude,
         storeType: 'stores'
       }))
-      dispatch(fetchBestCheapDeals({ storeType: 'stores', page: 1, limit: 20 }))
+      dispatch(fetchBestCheapDeals({ storeType: 'stores', page: 1, limit: 21 }))
     }
   }, [userLocation, dispatch])
 
