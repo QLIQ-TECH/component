@@ -1728,7 +1728,7 @@ export default function CheckoutPage() {
         gigCompletionDiscountAmount: appliedGigCompletion ? gigCompletionDiscountAmount : undefined,
         gigCompletionDiscountPercentage: appliedGigCompletion ? appliedGigCompletion.customerDiscountPercentage : undefined,
         gigCompletionDiscountFixed: appliedGigCompletion ? appliedGigCompletion.customerDiscountFixed : undefined,
-        currency: 'usd',
+        currency: 'aed',
         userId: mongoUserId, // MongoDB user ID
         cognitoUserId: cognitoUserId, // Cognito user ID
         deliveryAddress: selectedAddress, // Include selected delivery address
