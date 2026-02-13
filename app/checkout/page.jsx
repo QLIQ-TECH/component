@@ -1821,19 +1821,19 @@ export default function CheckoutPage() {
         return
       }
 
-      // Build checkout payload
+      // Build checkout payload for cash-wallet API (backendcart.qliq.ae/api/payment/cash-wallet/checkout)
       const checkoutPayload = {
         items: cartItems.map(item => ({
-          productId: item.productId || item.id,
+          productId: (item.productId || item.id)?.toString?.() || item.productId || item.id,
           name: item.name || 'Product',
-          price: item.price || 0,
-          quantity: item.quantity || 1,
+          price: Number(item.price) || 0,
+          quantity: Number(item.quantity) || 1,
           image: item.image || null
         })),
-        currency: 'aed',
-        total: actualTotal,
-        subtotal: originalSubtotal,
-        vat: vatAmount,
+        currency: 'usd',
+        total: Number(actualTotal),
+        subtotal: Number(originalSubtotal),
+        vat: Number(vatAmount),
         discount: qoynsDiscountAmount + couponDiscountAmount + cashWalletDiscountAmount,
         cashWalletAmount: cashWalletDiscountAmount,
         qoynsDiscountAmount: qoynsDiscountAmount,
@@ -1849,27 +1849,16 @@ export default function CheckoutPage() {
           phone: selectedAddress.phone,
           email: selectedAddress.email
         },
-        shippingAddress: shippingSameAsDelivery ? {
-          fullName: selectedAddress.fullName,
-          addressLine1: selectedAddress.addressLine1,
-          city: selectedAddress.city,
-          state: selectedAddress.state,
-          postalCode: selectedAddress.postalCode,
-          country: selectedAddress.country,
-          phone: selectedAddress.phone,
-          email: selectedAddress.email
-        } : null,
-        shippingMethod: selectedShippingMethod?.id || selectedShippingMethod?.methodId || 'standard',
+        shippingMethod: (selectedShippingMethod?.id || selectedShippingMethod?.methodId || 'standard').toString(),
         shippingMethodName: selectedShippingMethod?.name || selectedShippingMethod?.methodName || 'Standard Delivery',
-        shippingMethodTime: selectedShippingMethod?.deliveryTime || selectedShippingMethod?.estimatedDelivery || selectedShippingMethod?.time,
-        shippingMethodCost: shippingCost,
-        shippingCost: shippingCost
+        shippingMethodCost: Number(shippingCost)
       }
 
       console.log('📡 [CASH WALLET PAYMENT] Calling checkout API:', checkoutPayload)
 
+      let result
       try {
-        const result = await dispatch(createCashWalletCheckout(checkoutPayload)).unwrap()
+        result = await dispatch(createCashWalletCheckout(checkoutPayload)).unwrap()
         console.log('✅ [CASH WALLET PAYMENT] Success:', result)
       } catch (err) {
         console.error('❌ [CASH WALLET PAYMENT] Failed:', err)
@@ -1895,11 +1884,9 @@ export default function CheckoutPage() {
       // Show success toast briefly then redirect
       showToast('Payment successful with Cash Wallet!', 'success')
       
-      // Use router.push for proper Next.js navigation
-      const orderId = result.data?.order?._id || result.data?.orderId || ''
+      // Redirect to success page with order_id (same pattern as Stripe success redirect)
+      const orderId = (result && (result?.data?.order?._id || result?.data?.orderId || result?.order?._id || result?.orderId)) || ''
       const redirectUrl = `/checkout/success?payment_method=cash_wallet${orderId ? `&order_id=${orderId}` : ''}`
-      
-      // Small delay to allow toast to show, then redirect
       setTimeout(() => {
         window.location.replace(redirectUrl)
       }, 500)

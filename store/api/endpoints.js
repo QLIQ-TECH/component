@@ -287,7 +287,8 @@ export const payment = {
   base: BASES.payment,
   stripeCheckout: `${BASES.payment}/payment/stripe/checkout`,
   stripeHostedCheckout: `${BASES.payment}/payment/stripe/hosted-checkout`,
-  cashWalletCheckout: `${BASES.payment}/payment/cash-wallet/checkout`,
+  // Cash wallet checkout: full payment via wallet - always use cart backend
+  cashWalletCheckout: `${BASES.cart}/payment/cash-wallet/checkout`,
   stripeConfirmSession: (sessionId) => `${BASES.payment}/payment/stripe/confirm-session/${sessionId}`,
   stripeConfirm: (paymentIntentId) => `${BASES.payment}/payment/stripe/confirm/${paymentIntentId}`,
 }
