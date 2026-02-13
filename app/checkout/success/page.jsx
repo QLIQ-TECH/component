@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Navigation from '@/components/Navigation'
 import Footer from '@/components/Footer'
 import { getAuthToken, getUserFromCookies } from '@/utils/userUtils'
@@ -12,6 +12,7 @@ import { removeFromCart, clearCart } from '@/store/slices/cartSlice'
 import {
   redeemQoyns,
   fetchUserOrders,
+  fetchOrderById,
   confirmStripeSession,
   confirmStripePaymentIntent,
   redeemCash,
@@ -22,6 +23,7 @@ import { fetchUserBalance, fetchRedeemableCashBalance } from '@/store/slices/wal
 
 export default function CheckoutSuccessPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const dispatch = useDispatch()
   const cartItems = useSelector(state => state.cart.items || [])
   const [paymentStatus, setPaymentStatus] = useState('loading')
@@ -503,33 +505,64 @@ export default function CheckoutSuccessPage() {
         
         console.log('URL params:', { sessionId, paymentIntentId, paymentIntentClientSecret, paymentMethod })
         
-        // If paid with cash wallet only
+        // If paid with cash wallet - show success page immediately, then fetch order in background
         if (paymentMethod === 'cash_wallet') {
-          console.log('Payment successful via Cash Wallet')
+          const orderIdFromUrl = searchParams.get('order_id')
+          console.log('Payment successful via Cash Wallet, order_id:', orderIdFromUrl)
+
+          // Show success page immediately so it opens right away
           setPaymentData({
             paymentMethod: 'cash_wallet',
             status: 'succeeded',
-            message: 'Payment completed successfully with Cash Wallet'
+            message: 'Payment completed successfully with Cash Wallet',
+            orderId: orderIdFromUrl || null,
+            sessionId: orderIdFromUrl || null,
+            totalAmount: 0
           })
           setPaymentStatus('success')
-          
-          // Fetch order and notify gig completion for cash wallet orders
-          try {
-            const ordersData = await dispatch(fetchUserOrders({ page: 1, limit: 1 })).unwrap()
-            const ordersList = ordersData?.data?.orders ||
-                              ordersData?.orders?.orders ||
-                              ordersData?.data ||
-                              ordersData?.orders ||
-                              []
-            if (ordersList && ordersList.length > 0) {
-              const latestOrder = ordersList[0]
-              await notifyGigCompletionPurchase(latestOrder)
-              await createDeliveryOrder(latestOrder)
+
+          // Fetch order in background and update paymentData (order details for View Order)
+          ;(async () => {
+            try {
+              let order = null
+              if (orderIdFromUrl) {
+                try {
+                  order = await dispatch(fetchOrderById(orderIdFromUrl)).unwrap()
+                } catch (err) {
+                  console.warn('fetchOrderById failed, falling back to fetchUserOrders:', err)
+                }
+              }
+              if (!order) {
+                const ordersData = await dispatch(fetchUserOrders({ page: 1, limit: 1 })).unwrap()
+                const ordersList = ordersData?.data?.orders ||
+                                  ordersData?.orders?.orders ||
+                                  ordersData?.data ||
+                                  ordersData?.orders ||
+                                  []
+                order = ordersList?.[0] ?? null
+              }
+              const orderId = order?.orderNumber || order?.orderId || order?._id || order?.id
+              const totalAmount = order?.totalAmount ?? order?.total ?? 0
+              setPaymentData(prev => prev ? {
+                ...prev,
+                orderId: orderIdFromUrl || orderId,
+                sessionId: orderIdFromUrl || orderId,
+                totalAmount: typeof totalAmount === 'number' ? totalAmount : parseFloat(totalAmount) || 0
+              } : prev)
+
+              await fetchOrderAndRedeemQoyns(orderId || orderIdFromUrl || 'cash_wallet', 'cash_wallet')
+              if (order) {
+                try {
+                  await notifyGigCompletionPurchase(order)
+                  if (typeof createDeliveryOrder === 'function') await createDeliveryOrder(order)
+                } catch (e) {
+                  console.error('❌ Error on gig/delivery (cash wallet):', e)
+                }
+              }
+            } catch (e) {
+              console.error('❌ Error fetching order for cash wallet success:', e)
             }
-          } catch (error) {
-            console.error('❌ Error fetching order for gig completion (cash wallet):', error)
-          }
-          
+          })()
           return
         }
         
@@ -798,12 +831,16 @@ export default function CheckoutSuccessPage() {
                   </h3>
                 </div>
                 <div className={successStyles.cardContent}>
-                  <div className={successStyles.paymentRow}>
-                    <span className={successStyles.paymentLabel}>Payment ID:</span>
-                    <span className={successStyles.paymentValue}>
-                      {paymentData.paymentIntentId || paymentData.sessionId}
-                    </span>
-                  </div>
+                  {(paymentData.paymentIntentId || paymentData.sessionId || paymentData.orderId) && (
+                    <div className={successStyles.paymentRow}>
+                      <span className={successStyles.paymentLabel}>
+                        {paymentData.paymentMethod === 'cash_wallet' ? 'Order ID:' : 'Payment ID:'}
+                      </span>
+                      <span className={successStyles.paymentValue}>
+                        {paymentData.paymentIntentId || paymentData.sessionId || paymentData.orderId}
+                      </span>
+                    </div>
+                  )}
                   {paymentData.totalAmount && (
                     <div className={successStyles.paymentRow}>
                       <span className={successStyles.paymentLabel}>Amount:</span>
@@ -858,18 +895,25 @@ export default function CheckoutSuccessPage() {
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons - View Order / View My Orders and Continue Shopping */}
             <div className={successStyles.actionButtons}>
               <button 
                 className={successStyles.primaryButton}
-                onClick={() => window.location.href = '/profile?tab=orders'}
+                onClick={() => {
+                  const orderId = paymentData?.orderId || paymentData?.sessionId
+                  if (orderId) {
+                    router.push(`/orderhistory?orderId=${encodeURIComponent(orderId)}`)
+                  } else {
+                    router.push('/profile?tab=orders')
+                  }
+                }}
               >
                 <span className={successStyles.buttonIcon}>📋</span>
-                <span>View My Orders</span>
+                <span>{paymentData?.orderId || paymentData?.sessionId ? 'View Order' : 'View My Orders'}</span>
               </button>
               <button 
                 className={successStyles.secondaryButton}
-                onClick={() => window.location.href = '/'}
+                onClick={() => router.push('/')}
               >
                 <span className={successStyles.buttonIcon}>🛍️</span>
                 <span>Continue Shopping</span>

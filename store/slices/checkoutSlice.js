@@ -482,7 +482,9 @@ export const createStripeHostedCheckoutSession = createAsyncThunk(
   }
 )
 
-// Cash wallet checkout
+// Cash wallet checkout - POST https://backendcart.qliq.ae/api/payment/cash-wallet/checkout
+// Call when full payment is done by cash wallet. Payload: items, currency, total, subtotal, vat, discount,
+// cashWalletAmount, qoynsDiscountAmount, couponDiscountAmount, couponCode, deliveryAddress, shippingMethod, shippingMethodName, shippingMethodCost
 export const createCashWalletCheckout = createAsyncThunk(
   'checkout/createCashWalletCheckout',
   async (checkoutPayload, { rejectWithValue }) => {
@@ -491,7 +493,8 @@ export const createCashWalletCheckout = createAsyncThunk(
       if (!token) {
         throw new Error('Authentication required')
       }
-      const response = await fetch(payment.cashWalletCheckout, {
+      const url = payment.cashWalletCheckout
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -499,17 +502,17 @@ export const createCashWalletCheckout = createAsyncThunk(
         },
         body: JSON.stringify(checkoutPayload)
       })
+      const responseText = await response.text()
       if (!response.ok) {
-        const errorText = await response.text()
         try {
-          const errorData = JSON.parse(errorText)
+          const errorData = JSON.parse(responseText)
           throw new Error(errorData.message || 'Failed to process cash wallet payment.')
         } catch (e) {
-          if (e.message && e.message.startsWith('Failed to process')) throw e
-          throw new Error('Failed to process cash wallet payment. Please try again.')
+          if (e instanceof Error && e.message.startsWith('Failed to process')) throw e
+          throw new Error(responseText || 'Failed to process cash wallet payment. Please try again.')
         }
       }
-      return await response.json()
+      return responseText ? JSON.parse(responseText) : {}
     } catch (error) {
       return rejectWithValue(error.message)
     }
@@ -566,6 +569,36 @@ export const fetchUserOrders = createAsyncThunk(
       }
       const data = await response.json()
       return data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch single order by ID (for success page - cash wallet)
+export const fetchOrderById = createAsyncThunk(
+  'checkout/fetchOrderById',
+  async (orderId, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      if (!orderId) {
+        throw new Error('Order ID is required')
+      }
+      const response = await fetch(orders.getOrderById(orderId), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Failed to fetch order')
+      }
+      const data = await response.json()
+      return data?.data?.order ?? data?.order ?? data
     } catch (error) {
       return rejectWithValue(error.message)
     }
