@@ -184,9 +184,10 @@ export default function CheckoutSuccessPage() {
         return
       }
 
-      // Get order ID - try multiple fields
+      // Get order ID for API (prefer order number e.g. "ORD-12345-ABC" for gig-completions/purchase)
       const orderId = order?.orderNumber || order?.orderId || order?._id || order?.id
-      if (!orderId) {
+      const orderIdStr = orderId != null ? String(orderId) : ''
+      if (!orderIdStr) {
         console.error('❌ [GIG COMPLETION] Order ID not found, cannot notify purchase')
         return
       }
@@ -286,24 +287,21 @@ export default function CheckoutSuccessPage() {
         console.log('💰 [GIG COMPLETION] Calculating percentage commission:', commissionPercentage + '% of', productPriceInAED.toFixed(2), 'AED (product price) =', influencerCommission.toFixed(2), 'AED')
       }
 
-      console.log('🔄 [GIG COMPLETION] Calling purchase API:', {
-        orderId,
+      // Round commission to 2 decimal places (for both fixed and percentage) - in AED
+      const finalCommission = Math.round(influencerCommission * 100) / 100
+
+      console.log('🔄 [GIG COMPLETION] Calling POST /api/gig-completions/purchase:', {
+        orderId: orderIdStr,
         couponCode: gigInfo.discountCode,
+        influencerCommission: finalCommission,
         totalProductPrice: totalProductPrice.toFixed(2),
         productPriceInAED: productPriceInAED.toFixed(2),
-        orderSubtotal: order?.subtotal?.toFixed(2) || 'N/A',
-        commissionType: commissionFixed > 0 ? 'fixed' : 'percentage',
-        commissionFixed: commissionFixed > 0 ? commissionFixed : null,
-        commissionPercentage: commissionPercentage > 0 ? commissionPercentage : null,
-        influencerCommission: influencerCommission.toFixed(2)
+        commissionType: commissionFixed > 0 ? 'fixed' : 'percentage'
       })
-
-      // Round commission to 2 decimal places (for both fixed and percentage)
-      const finalCommission = Math.round(influencerCommission * 100) / 100
 
       try {
         await dispatch(notifyGigCompletionPurchase({
-          orderId,
+          orderId: orderIdStr,
           couponCode: gigInfo.discountCode,
           influencerCommission: finalCommission
         })).unwrap()

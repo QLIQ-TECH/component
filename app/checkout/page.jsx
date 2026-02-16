@@ -2171,7 +2171,7 @@ export default function CheckoutPage() {
                   const daysRemaining = calculateDaysRemaining(qoynExpiryDate)
                   
                   if (daysRemaining !== null) {
-                    return `${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'} remaining`
+                    return `Expires in ${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'}`
                   } else {
                     return 'No expiry is available'
                   }
@@ -2305,7 +2305,7 @@ export default function CheckoutPage() {
 
               {/* Address Form */}
               {showAddressForm && (
-                <form className={styles.addressForm} onSubmit={handleAddressSubmit}>
+                <form className={styles.addressForm} onSubmit={handleAddressSubmit} noValidate>
                   {error && (
                     <div className={styles.errorMessage}>
                       {error}
@@ -2550,7 +2550,7 @@ export default function CheckoutPage() {
                 </div>
               )}
               {!shippingSameAsDelivery && showShippingForm && (
-                <form className={styles.addressForm} onSubmit={handleAddressSubmit}>
+                <form className={styles.addressForm} onSubmit={handleAddressSubmit} noValidate>
                   <div className={styles.addressFormTabs}>
                     <button
                       type="button"
