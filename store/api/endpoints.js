@@ -7,10 +7,12 @@ export const BASES = {
   auth: process.env.NEXT_PUBLIC_AUTH_BASE_URL || 'https://backendauth.qliq.ae/api',
   cart: process.env.NEXT_PUBLIC_CART_BASE_URL || 'https://backendcart.qliq.ae/api',
   payment: process.env.NEXT_PUBLIC_PAYMENT_BASE_URL || 'https://backendcart.qliq.ae/api',
-  delivery: process.env.NEXT_PUBLIC_PAYMENT_BASE_URL || 'https://backendcart.qliq.ae/api', // Same as payment service
+  delivery: process.env.NEXT_PUBLIC_DELIVERY_BASE_URL || process.env.NEXT_PUBLIC_PAYMENT_BASE_URL || 'https://backendcart.qliq.ae/api',
+  gigs: process.env.NEXT_PUBLIC_GIGS_BASE_URL || 'https://backendgigs.qliq.ae/api',
   upload: process.env.NEXT_PUBLIC_UPLOAD_BASE_URL || 'https://ecomupload.qliq.ae/api',
   review: process.env.NEXT_PUBLIC_REVIEW_BASE_URL || 'https://backendreview.qliq.ae/api',
   subscription: process.env.NEXT_PUBLIC_SUBSCRIPTION_BASE_URL || 'https://backendamp.qliq.ae/api',
+  subPayment: process.env.NEXT_PUBLIC_SUB_PAYMENT_BASE_URL || 'https://backendpayment.qliq.ae/api',
   wallet: process.env.NEXT_PUBLIC_WALLET_BASE_URL || 'https://backendwallet.qliq.ae/api',
 }
 
@@ -138,7 +140,11 @@ export const catalog = {
   hypermarketLevel2Categories: `${BASES.catalog}/categories/hypermarket/level2`,
   supermarketLevel2Categories: `${BASES.catalog}/categories/supermarket/level2`,
   storeLevel2Categories: `${BASES.catalog}/categories/store/level2`,
-  categoryChildren: (slug) => `${BASES.catalog}/categories/level2/${slug}/children`,
+  categoryChildren: (slug, params = {}) => {
+    const { page = 1, limit = 10 } = params;
+    const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+    return `${BASES.catalog}/categories/level2/${encodeURIComponent(slug)}/children?${q.toString()}`;
+  },
   categoryBySlug: (slug) => `${BASES.catalog}/categories/slug/${slug}`,
   searchProducts: (query) => `${BASES.catalog}/search/products?q=${encodeURIComponent(query)}`,
   homepageSections: (params = {}) => {
@@ -281,7 +287,10 @@ export const payment = {
   base: BASES.payment,
   stripeCheckout: `${BASES.payment}/payment/stripe/checkout`,
   stripeHostedCheckout: `${BASES.payment}/payment/stripe/hosted-checkout`,
-  cashWalletCheckout: `${BASES.payment}/payment/cash-wallet/checkout`,
+  // Cash wallet checkout: full payment via wallet - always use cart backend
+  cashWalletCheckout: `${BASES.cart}/payment/cash-wallet/checkout`,
+  stripeConfirmSession: (sessionId) => `${BASES.payment}/payment/stripe/confirm-session/${sessionId}`,
+  stripeConfirm: (paymentIntentId) => `${BASES.payment}/payment/stripe/confirm/${paymentIntentId}`,
 }
 
 export const addresses = {
@@ -330,7 +339,7 @@ export const review = {
 export const subscription = {
   base: BASES.subscription,
   details: `${BASES.subscription}/users/subscription-details`,
-  webSubscription: `https://backendpayment.qliq.ae/api/wallet/web-subscription`,
+  webSubscription: `${BASES.subPayment}/wallet/web-subscription`,
 }
 
 export const wallet = {
@@ -348,6 +357,12 @@ export const delivery = {
   getShippingMethods: `${BASES.delivery}/delivery/shipping/methods`,
 }
 
+export const gigs = {
+  base: BASES.gigs,
+  acceptedPurchaseGigs: `${BASES.gigs}/gig-completions/accepted-purchase-gigs`,
+  purchase: `${BASES.gigs}/gig-completions/purchase`,
+}
+
 export const zones = {
   base: `${BASES.auth}/zones`,
   getCountries: `${BASES.auth}/zones/countries`,
@@ -361,6 +376,6 @@ export const settler = {
   getByEmail: (email) => `${BASES.auth}/settlers/email/${email}`,
 }
 
-export default { catalog, search, auth, cart, addresses, orders, upload, review, subscription, wallet, delivery, settler }
+export default { catalog, search, auth, cart, addresses, orders, upload, review, subscription, wallet, delivery, gigs, settler }
 
 

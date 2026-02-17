@@ -28,6 +28,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'personal-info')
   const [isEditing, setIsEditing] = useState(false)
   const [locationModalOpen, setLocationModalOpen] = useState(false)
+  const [comingSoonOpen, setComingSoonOpen] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState('all')
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 10
@@ -174,7 +175,7 @@ export default function ProfilePage() {
             <button className={styles.goLiveBtn} onClick={handleGoLiveClick}>Go to QLIQ Live</button>
             <button 
               className={styles.upgradeBtn}
-              onClick={() => router.push('/subscription')}
+              onClick={() => setComingSoonOpen(true)}
             >
               Upgrade to QLIQ Plus
             </button>
@@ -392,6 +393,32 @@ export default function ProfilePage() {
         open={locationModalOpen}
         onClose={() => setLocationModalOpen(false)}
       />
+      {/* QLIQ Plus Coming Soon modal */}
+      {comingSoonOpen && (
+        <div className={styles.comingSoonOverlay} onClick={() => setComingSoonOpen(false)} role="dialog" aria-modal="true" aria-labelledby="coming-soon-title">
+          <div className={styles.comingSoonModal} onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              className={styles.comingSoonClose}
+              onClick={() => setComingSoonOpen(false)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h2 id="coming-soon-title" className={styles.comingSoonTitle}>Coming Soon</h2>
+            <p className={styles.comingSoonText}>
+              QLIQ Plus is on its way. Stay tuned for exclusive benefits and more.
+            </p>
+            <button
+              type="button"
+              className={styles.comingSoonBtn}
+              onClick={() => setComingSoonOpen(false)}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

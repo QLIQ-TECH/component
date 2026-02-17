@@ -2,19 +2,28 @@
 
 import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Navigation from '@/components/Navigation'
 import Footer from '@/components/Footer'
 import { getAuthToken, getUserFromCookies } from '@/utils/userUtils'
 import styles from '../checkout.module.css'
 import successStyles from './success.module.css'
 import { removeFromCart, clearCart } from '@/store/slices/cartSlice'
-import { redeemQoyns } from '@/store/slices/checkoutSlice'
+import {
+  redeemQoyns,
+  fetchUserOrders,
+  fetchOrderById,
+  confirmStripeSession,
+  confirmStripePaymentIntent,
+  redeemCash,
+  fetchAcceptedPurchaseGigs,
+  notifyGigCompletionPurchase
+} from '@/store/slices/checkoutSlice'
 import { fetchUserBalance, fetchRedeemableCashBalance } from '@/store/slices/walletSlice'
-import { orders, wallet } from '@/store/api/endpoints'
 
 export default function CheckoutSuccessPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const dispatch = useDispatch()
   const cartItems = useSelector(state => state.cart.items || [])
   const [paymentStatus, setPaymentStatus] = useState('loading')
@@ -49,16 +58,11 @@ export default function CheckoutSuccessPage() {
       }
 
       console.log('📡 [QOYNS REDEMPTION] Fetching user orders...')
-      const ordersResponse = await fetch(`${orders.getUserOrders}?page=1&limit=1`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (!ordersResponse.ok) {
-        const errorText = await ordersResponse.text()
-        console.error('❌ [QOYNS REDEMPTION] Failed to fetch orders:', ordersResponse.status, errorText)
+      let ordersData
+      try {
+        ordersData = await dispatch(fetchUserOrders({ page: 1, limit: 1 })).unwrap()
+      } catch (err) {
+        console.error('❌ [QOYNS REDEMPTION] Failed to fetch orders:', err)
         if (retryCount < MAX_RETRIES) {
           setTimeout(() => {
             fetchOrderAndRedeemQoyns(sessionIdOrPaymentIntentId, type, retryCount + 1)
@@ -66,8 +70,6 @@ export default function CheckoutSuccessPage() {
         }
         return
       }
-
-      const ordersData = await ordersResponse.json()
       console.log('📦 [QOYNS REDEMPTION] Orders response structure:', {
         hasData: !!ordersData.data,
         hasOrders: !!ordersData.orders,
@@ -182,9 +184,10 @@ export default function CheckoutSuccessPage() {
         return
       }
 
-      // Get order ID - try multiple fields
+      // Get order ID for API (prefer order number e.g. "ORD-12345-ABC" for gig-completions/purchase)
       const orderId = order?.orderNumber || order?.orderId || order?._id || order?.id
-      if (!orderId) {
+      const orderIdStr = orderId != null ? String(orderId) : ''
+      if (!orderIdStr) {
         console.error('❌ [GIG COMPLETION] Order ID not found, cannot notify purchase')
         return
       }
@@ -227,21 +230,14 @@ export default function CheckoutSuccessPage() {
       }
 
       console.log('📡 [GIG COMPLETION] Fetching gig completion details...')
-      const gigResponse = await fetch('https://backendgigs.qliq.ae/api/gig-completions/accepted-purchase-gigs', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (!gigResponse.ok) {
-        console.error('❌ [GIG COMPLETION] Failed to fetch gig completions:', gigResponse.status)
+      let gigCompletions
+      try {
+        gigCompletions = await dispatch(fetchAcceptedPurchaseGigs()).unwrap()
+        gigCompletions = Array.isArray(gigCompletions) ? gigCompletions : []
+      } catch (err) {
+        console.error('❌ [GIG COMPLETION] Failed to fetch gig completions:', err)
         return
       }
-
-      const gigData = await gigResponse.json()
-      const gigCompletions = Array.isArray(gigData.data) ? gigData.data : []
       
       const matchingGig = gigCompletions.find(
         (gig) => gig.discountCode === gigInfo.discountCode
@@ -291,50 +287,29 @@ export default function CheckoutSuccessPage() {
         console.log('💰 [GIG COMPLETION] Calculating percentage commission:', commissionPercentage + '% of', productPriceInAED.toFixed(2), 'AED (product price) =', influencerCommission.toFixed(2), 'AED')
       }
 
-      console.log('🔄 [GIG COMPLETION] Calling purchase API:', {
-        orderId,
-        couponCode: gigInfo.discountCode,
-        totalProductPrice: totalProductPrice.toFixed(2),
-        productPriceInAED: productPriceInAED.toFixed(2),
-        orderSubtotal: order?.subtotal?.toFixed(2) || 'N/A',
-        commissionType: commissionFixed > 0 ? 'fixed' : 'percentage',
-        commissionFixed: commissionFixed > 0 ? commissionFixed : null,
-        commissionPercentage: commissionPercentage > 0 ? commissionPercentage : null,
-        influencerCommission: influencerCommission.toFixed(2)
-      })
-
-      // Round commission to 2 decimal places (for both fixed and percentage)
+      // Round commission to 2 decimal places (for both fixed and percentage) - in AED
       const finalCommission = Math.round(influencerCommission * 100) / 100
 
-      const requestBody = {
-        orderId: orderId,
+      console.log('🔄 [GIG COMPLETION] Calling POST /api/gig-completions/purchase:', {
+        orderId: orderIdStr,
         couponCode: gigInfo.discountCode,
-        influencerCommission: finalCommission
-      }
-
-      const purchaseResponse = await fetch('https://backendgigs.qliq.ae/api/gig-completions/purchase', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
+        influencerCommission: finalCommission,
+        totalProductPrice: totalProductPrice.toFixed(2),
+        productPriceInAED: productPriceInAED.toFixed(2),
+        commissionType: commissionFixed > 0 ? 'fixed' : 'percentage'
       })
 
-      if (!purchaseResponse.ok) {
-        const errorText = await purchaseResponse.text()
-        console.error('❌ [GIG COMPLETION] Failed to notify purchase:', purchaseResponse.status, errorText)
-        try {
-          const errorData = JSON.parse(errorText)
-          console.error('❌ [GIG COMPLETION] Error details:', errorData)
-        } catch {
-          // Error text is not JSON, already logged
-        }
+      try {
+        await dispatch(notifyGigCompletionPurchase({
+          orderId: orderIdStr,
+          couponCode: gigInfo.discountCode,
+          influencerCommission: finalCommission
+        })).unwrap()
+        console.log('✅ [GIG COMPLETION] Purchase notification sent successfully')
+      } catch (err) {
+        console.error('❌ [GIG COMPLETION] Failed to notify purchase:', err)
         return
       }
-
-      const result = await purchaseResponse.json()
-      console.log('✅ [GIG COMPLETION] Purchase notification sent successfully:', result)
       
       // Clear sessionStorage after successful notification
       sessionStorage.removeItem('pendingGigCompletionPurchase')
@@ -494,33 +469,14 @@ export default function CheckoutSuccessPage() {
       }
 
       console.log('📡 [CASH REDEMPTION] Calling redeem API after order success...')
-      console.log('📡 [CASH REDEMPTION] API: https://backendwallet.qliq.ae/api/wallet/cash/redeem')
       console.log('📡 [CASH REDEMPTION] Amount:', cashInfo.amountInAed, 'AED')
-      const response = await fetch('https://backendwallet.qliq.ae/api/wallet/cash/redeem', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          amountInAed: cashInfo.amountInAed
-        })
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ [CASH REDEMPTION] Failed to redeem cash:', response.status, errorText)
-        try {
-          const errorData = JSON.parse(errorText)
-          console.error('❌ [CASH REDEMPTION] Error details:', errorData)
-        } catch {
-          // Error text is not JSON, already logged
-        }
+      try {
+        await dispatch(redeemCash({ amountInAed: cashInfo.amountInAed })).unwrap()
+        console.log('✅ [CASH REDEMPTION] Cash redeemed successfully')
+      } catch (err) {
+        console.error('❌ [CASH REDEMPTION] Failed to redeem cash:', err)
         return
       }
-
-      const result = await response.json()
-      console.log('✅ [CASH REDEMPTION] Cash redeemed successfully:', result)
       
       // Clear sessionStorage after successful redemption
       sessionStorage.removeItem('pendingCashRedemption')
@@ -547,45 +503,64 @@ export default function CheckoutSuccessPage() {
         
         console.log('URL params:', { sessionId, paymentIntentId, paymentIntentClientSecret, paymentMethod })
         
-        // If paid with cash wallet only
+        // If paid with cash wallet - show success page immediately, then fetch order in background
         if (paymentMethod === 'cash_wallet') {
-          console.log('Payment successful via Cash Wallet')
+          const orderIdFromUrl = searchParams.get('order_id')
+          console.log('Payment successful via Cash Wallet, order_id:', orderIdFromUrl)
+
+          // Show success page immediately so it opens right away
           setPaymentData({
             paymentMethod: 'cash_wallet',
             status: 'succeeded',
-            message: 'Payment completed successfully with Cash Wallet'
+            message: 'Payment completed successfully with Cash Wallet',
+            orderId: orderIdFromUrl || null,
+            sessionId: orderIdFromUrl || null,
+            totalAmount: 0
           })
           setPaymentStatus('success')
-          
-          // Fetch order and notify gig completion for cash wallet orders
-          try {
-            const token = await getAuthToken()
-            if (token) {
-              const ordersResponse = await fetch(`${orders.getUserOrders}?page=1&limit=1`, {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-                }
-              })
-              if (ordersResponse.ok) {
-                const ordersData = await ordersResponse.json()
-                const ordersList = ordersData?.data?.orders || 
-                                  ordersData?.orders?.orders || 
-                                  ordersData?.data || 
-                                  ordersData?.orders ||
-                                  []
-                  if (ordersList && ordersList.length > 0) {
-                    const latestOrder = ordersList[0]
-                    await notifyGigCompletionPurchase(latestOrder)
-                    // Create delivery order after successful order placement
-                    await createDeliveryOrder(latestOrder)
-                  }
+
+          // Fetch order in background and update paymentData (order details for View Order)
+          ;(async () => {
+            try {
+              let order = null
+              if (orderIdFromUrl) {
+                try {
+                  order = await dispatch(fetchOrderById(orderIdFromUrl)).unwrap()
+                } catch (err) {
+                  console.warn('fetchOrderById failed, falling back to fetchUserOrders:', err)
                 }
               }
-            } catch (error) {
-              console.error('❌ Error fetching order for gig completion (cash wallet):', error)
+              if (!order) {
+                const ordersData = await dispatch(fetchUserOrders({ page: 1, limit: 1 })).unwrap()
+                const ordersList = ordersData?.data?.orders ||
+                                  ordersData?.orders?.orders ||
+                                  ordersData?.data ||
+                                  ordersData?.orders ||
+                                  []
+                order = ordersList?.[0] ?? null
+              }
+              const orderId = order?.orderNumber || order?.orderId || order?._id || order?.id
+              const totalAmount = order?.totalAmount ?? order?.total ?? 0
+              setPaymentData(prev => prev ? {
+                ...prev,
+                orderId: orderIdFromUrl || orderId,
+                sessionId: orderIdFromUrl || orderId,
+                totalAmount: typeof totalAmount === 'number' ? totalAmount : parseFloat(totalAmount) || 0
+              } : prev)
+
+              await fetchOrderAndRedeemQoyns(orderId || orderIdFromUrl || 'cash_wallet', 'cash_wallet')
+              if (order) {
+                try {
+                  await notifyGigCompletionPurchase(order)
+                  if (typeof createDeliveryOrder === 'function') await createDeliveryOrder(order)
+                } catch (e) {
+                  console.error('❌ Error on gig/delivery (cash wallet):', e)
+                }
+              }
+            } catch (e) {
+              console.error('❌ Error fetching order for cash wallet success:', e)
             }
-          
+          })()
           return
         }
         
@@ -601,66 +576,34 @@ export default function CheckoutSuccessPage() {
           }
 
           try {
-            // Confirm session with backend to create order
-            const response = await fetch(`${process.env.NEXT_PUBLIC_PAYMENT_BASE_URL}/payment/stripe/confirm-session/${sessionId}`, {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              }
-            })
-
-            if (!response.ok) {
-              const errorData = await response.json()
-              throw new Error(errorData.message || 'Failed to confirm payment session')
-            }
-
-            const responseData = await response.json()
-            setPaymentData(responseData.data)
+            const responseData = await dispatch(confirmStripeSession(sessionId)).unwrap()
+            setPaymentData(responseData)
             setPaymentStatus('success')
             console.log('✅ Order created successfully via session confirmation')
             console.log('✅ Order success message generated')
-            
-            // Immediately fetch the order and redeem Qoyns (order should be created synchronously)
+
             await fetchOrderAndRedeemQoyns(sessionId, 'session')
-            
-            // Fetch the latest order for gig completion notification
+
             try {
-              const token = await getAuthToken()
-              if (token) {
-                const ordersResponse = await fetch(`${orders.getUserOrders}?page=1&limit=1`, {
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  }
-                })
-                if (ordersResponse.ok) {
-                  const ordersData = await ordersResponse.json()
-                  const ordersList = ordersData?.data?.orders || 
-                                    ordersData?.orders?.orders || 
-                                    ordersData?.data || 
-                                    ordersData?.orders ||
-                                    []
-                  if (ordersList && ordersList.length > 0) {
-                    const latestOrder = ordersList[0]
-                    // Notify gig completion purchase AFTER order success
-                    await notifyGigCompletionPurchase(latestOrder)
-                    // Create delivery order after successful order placement
-                    await createDeliveryOrder(latestOrder)
-                  }
-                }
+              const ordersData = await dispatch(fetchUserOrders({ page: 1, limit: 1 })).unwrap()
+              const ordersList = ordersData?.data?.orders ||
+                                ordersData?.orders?.orders ||
+                                ordersData?.data ||
+                                ordersData?.orders ||
+                                []
+              if (ordersList && ordersList.length > 0) {
+                const latestOrder = ordersList[0]
+                await notifyGigCompletionPurchase(latestOrder)
+                await createDeliveryOrder(latestOrder)
               }
             } catch (error) {
               console.error('❌ Error fetching order for gig completion:', error)
             }
-            
-            // Redeem cash wallet AFTER order success message is generated
-            // This ensures the order is confirmed before redeeming the cash wallet amount
+
             console.log('💰 [CASH WALLET] Order success confirmed, now redeeming cash wallet...')
             await redeemCashWallet()
           } catch (error) {
             console.error('❌ Error confirming session:', error)
-            // Still show success but with warning
             setPaymentData({
               sessionId: sessionId,
               status: 'succeeded',
@@ -668,40 +611,22 @@ export default function CheckoutSuccessPage() {
             })
             setPaymentStatus('success')
             console.log('✅ Order success message generated (with warning)')
-            
-            // Still try to redeem cash wallet even if order confirmation failed
-            // Payment was successful, so we should redeem the cash wallet
-            // Redeem AFTER success message is generated
             console.log('💰 [CASH WALLET] Order success message shown, now redeeming cash wallet...')
             await redeemCashWallet()
-            
-            // Try to notify gig completion even if order confirmation failed
             try {
-              const token = await getAuthToken()
-              if (token) {
-                const ordersResponse = await fetch(`${orders.getUserOrders}?page=1&limit=1`, {
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  }
-                })
-                if (ordersResponse.ok) {
-                  const ordersData = await ordersResponse.json()
-                  const ordersList = ordersData?.data?.orders || 
-                                    ordersData?.orders?.orders || 
-                                    ordersData?.data || 
-                                    ordersData?.orders ||
-                                    []
-                  if (ordersList && ordersList.length > 0) {
-                    const latestOrder = ordersList[0]
-                    await notifyGigCompletionPurchase(latestOrder)
-                    // Create delivery order after successful order placement
-                    await createDeliveryOrder(latestOrder)
-                  }
-                }
+              const ordersData = await dispatch(fetchUserOrders({ page: 1, limit: 1 })).unwrap()
+              const ordersList = ordersData?.data?.orders ||
+                                ordersData?.orders?.orders ||
+                                ordersData?.data ||
+                                ordersData?.orders ||
+                                []
+              if (ordersList && ordersList.length > 0) {
+                const latestOrder = ordersList[0]
+                await notifyGigCompletionPurchase(latestOrder)
+                await createDeliveryOrder(latestOrder)
               }
-            } catch (error) {
-              console.error('❌ Error fetching order for gig completion (error case):', error)
+            } catch (err) {
+              console.error('❌ Error fetching order for gig completion (error case):', err)
             }
           }
           return
@@ -717,66 +642,34 @@ export default function CheckoutSuccessPage() {
               return
             }
 
-            // Confirm payment with backend
-            const response = await fetch(`${process.env.NEXT_PUBLIC_PAYMENT_BASE_URL}/payment/stripe/confirm/${paymentIntentId}`, {
-              method: 'GET',
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              }
-            })
-
-            if (!response.ok) {
-              const errorData = await response.json()
-              throw new Error(errorData.message || 'Failed to confirm payment')
-            }
-
-            const responseData = await response.json()
-            setPaymentData(responseData.data)
+            const responseData = await dispatch(confirmStripePaymentIntent(paymentIntentId)).unwrap()
+            setPaymentData(responseData)
             setPaymentStatus('success')
             console.log('✅ Order created successfully via payment intent confirmation')
             console.log('✅ Order success message generated')
-            
-            // Immediately fetch the order and redeem Qoyns
+
             await fetchOrderAndRedeemQoyns(paymentIntentId, 'paymentIntent')
-            
-            // Fetch the latest order for gig completion notification
+
             try {
-              const token = await getAuthToken()
-              if (token) {
-                const ordersResponse = await fetch(`${orders.getUserOrders}?page=1&limit=1`, {
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  }
-                })
-                if (ordersResponse.ok) {
-                  const ordersData = await ordersResponse.json()
-                  const ordersList = ordersData?.data?.orders || 
-                                    ordersData?.orders?.orders || 
-                                    ordersData?.data || 
-                                    ordersData?.orders ||
-                                    []
-                  if (ordersList && ordersList.length > 0) {
-                    const latestOrder = ordersList[0]
-                    // Notify gig completion purchase AFTER order success
-                    await notifyGigCompletionPurchase(latestOrder)
-                    // Create delivery order after successful order placement
-                    await createDeliveryOrder(latestOrder)
-                  }
-                }
+              const ordersData = await dispatch(fetchUserOrders({ page: 1, limit: 1 })).unwrap()
+              const ordersList = ordersData?.data?.orders ||
+                                ordersData?.orders?.orders ||
+                                ordersData?.data ||
+                                ordersData?.orders ||
+                                []
+              if (ordersList && ordersList.length > 0) {
+                const latestOrder = ordersList[0]
+                await notifyGigCompletionPurchase(latestOrder)
+                await createDeliveryOrder(latestOrder)
               }
             } catch (error) {
               console.error('❌ Error fetching order for gig completion:', error)
             }
-            
-            // Redeem cash wallet AFTER order success message is generated
-            // This ensures the order is confirmed before redeeming the cash wallet amount
+
             console.log('💰 [CASH WALLET] Order success confirmed, now redeeming cash wallet...')
             await redeemCashWallet()
           } catch (error) {
             console.error('❌ Error confirming payment intent:', error)
-            // Still show success but with warning
             setPaymentData({
               paymentIntentId: paymentIntentId,
               status: 'succeeded',
@@ -784,39 +677,22 @@ export default function CheckoutSuccessPage() {
             })
             setPaymentStatus('success')
             console.log('✅ Order success message generated (with warning)')
-            
-            // Payment was successful (we're on success page), so still try to redeem cash wallet
-            // Redeem AFTER success message is generated
             console.log('💰 [CASH WALLET] Order success message shown, now redeeming cash wallet...')
             await redeemCashWallet()
-            
-            // Try to notify gig completion even if order confirmation failed
             try {
-              const token = await getAuthToken()
-              if (token) {
-                const ordersResponse = await fetch(`${orders.getUserOrders}?page=1&limit=1`, {
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  }
-                })
-                if (ordersResponse.ok) {
-                  const ordersData = await ordersResponse.json()
-                  const ordersList = ordersData?.data?.orders || 
-                                    ordersData?.orders?.orders || 
-                                    ordersData?.data || 
-                                    ordersData?.orders ||
-                                    []
-                  if (ordersList && ordersList.length > 0) {
-                    const latestOrder = ordersList[0]
-                    await notifyGigCompletionPurchase(latestOrder)
-                    // Create delivery order after successful order placement
-                    await createDeliveryOrder(latestOrder)
-                  }
-                }
+              const ordersData = await dispatch(fetchUserOrders({ page: 1, limit: 1 })).unwrap()
+              const ordersList = ordersData?.data?.orders ||
+                                ordersData?.orders?.orders ||
+                                ordersData?.data ||
+                                ordersData?.orders ||
+                                []
+              if (ordersList && ordersList.length > 0) {
+                const latestOrder = ordersList[0]
+                await notifyGigCompletionPurchase(latestOrder)
+                await createDeliveryOrder(latestOrder)
               }
-            } catch (error) {
-              console.error('❌ Error fetching order for gig completion (error case):', error)
+            } catch (err) {
+              console.error('❌ Error fetching order for gig completion (error case):', err)
             }
           }
           return
@@ -953,12 +829,16 @@ export default function CheckoutSuccessPage() {
                   </h3>
                 </div>
                 <div className={successStyles.cardContent}>
-                  <div className={successStyles.paymentRow}>
-                    <span className={successStyles.paymentLabel}>Payment ID:</span>
-                    <span className={successStyles.paymentValue}>
-                      {paymentData.paymentIntentId || paymentData.sessionId}
-                    </span>
-                  </div>
+                  {(paymentData.paymentIntentId || paymentData.sessionId || paymentData.orderId) && (
+                    <div className={successStyles.paymentRow}>
+                      <span className={successStyles.paymentLabel}>
+                        {paymentData.paymentMethod === 'cash_wallet' ? 'Order ID:' : 'Payment ID:'}
+                      </span>
+                      <span className={successStyles.paymentValue}>
+                        {paymentData.paymentIntentId || paymentData.sessionId || paymentData.orderId}
+                      </span>
+                    </div>
+                  )}
                   {paymentData.totalAmount && (
                     <div className={successStyles.paymentRow}>
                       <span className={successStyles.paymentLabel}>Amount:</span>
@@ -1013,18 +893,25 @@ export default function CheckoutSuccessPage() {
               </div>
             </div>
 
-            {/* Action Buttons */}
+            {/* Action Buttons - View Order / View My Orders and Continue Shopping */}
             <div className={successStyles.actionButtons}>
               <button 
                 className={successStyles.primaryButton}
-                onClick={() => window.location.href = '/profile?tab=orders'}
+                onClick={() => {
+                  const orderId = paymentData?.orderId || paymentData?.sessionId
+                  if (orderId) {
+                    router.push(`/orderhistory?orderId=${encodeURIComponent(orderId)}`)
+                  } else {
+                    router.push('/profile?tab=orders')
+                  }
+                }}
               >
                 <span className={successStyles.buttonIcon}>📋</span>
-                <span>View My Orders</span>
+                <span>{paymentData?.orderId || paymentData?.sessionId ? 'View Order' : 'View My Orders'}</span>
               </button>
               <button 
                 className={successStyles.secondaryButton}
-                onClick={() => window.location.href = '/'}
+                onClick={() => router.push('/')}
               >
                 <span className={successStyles.buttonIcon}>🛍️</span>
                 <span>Continue Shopping</span>

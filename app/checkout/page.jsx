@@ -35,11 +35,14 @@ import {
   clearAppliedGigCompletion,
   fetchCountries,
   fetchCitiesByCountry,
-  fetchZonesByCity
+  fetchZonesByCity,
+  fetchShippingMethods,
+  createStripeHostedCheckoutSession,
+  createCashWalletCheckout,
+  redeemCash
 } from '@/store/slices/checkoutSlice'
 import { fetchProfile } from '@/store/slices/profileSlice'
 import { fetchUserBalance, fetchRedeemableCashBalance } from '@/store/slices/walletSlice'
-import { payment as paymentEndpoints, wallet as walletEndpoints } from '@/store/api/endpoints'
 import { loadStripe } from '@stripe/stripe-js'
 import StripeCheckout from '@/components/StripeCheckout'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
@@ -1104,51 +1107,33 @@ export default function CheckoutPage() {
     }
   }, [displayAddresses, selectedAddress, dispatch])
 
-  // Fetch shipping methods when address is selected
+  // Fetch shipping methods when address is selected (via slice)
   useEffect(() => {
-    const fetchShippingMethods = async () => {
-      if (!selectedAddress || !selectedAddress.latitude || !selectedAddress.longitude) {
-        setShippingMethods([])
-        setSelectedShippingMethod(null)
-        return
-      }
+    if (!selectedAddress || !selectedAddress.latitude || !selectedAddress.longitude) {
+      setShippingMethods([])
+      setSelectedShippingMethod(null)
+      return
+    }
 
-      setLoadingShippingMethods(true)
-      try {
-        const { delivery } = await import('@/store/api/endpoints')
-        const params = new URLSearchParams({
-          latitude: selectedAddress.latitude.toString(),
-          longitude: selectedAddress.longitude.toString(),
-          ...(selectedAddress.city && { city: selectedAddress.city }),
-          ...(selectedAddress.state && { state: selectedAddress.state }),
-          ...(selectedAddress.country && { country: selectedAddress.country }),
-          ...(selectedAddress.postalCode && { postalCode: selectedAddress.postalCode })
-        })
-
-        const token = await getAuthToken()
-        const response = await fetch(`${delivery.getShippingMethods}?${params.toString()}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch shipping methods')
-        }
-
-        const data = await response.json()
-        const methods = data.data?.shippingMethods || []
-        setShippingMethods(methods)
-
-        // Auto-select first method if available
-        if (methods.length > 0 && !selectedShippingMethod) {
+    setLoadingShippingMethods(true)
+    dispatch(fetchShippingMethods({
+      latitude: selectedAddress.latitude,
+      longitude: selectedAddress.longitude,
+      city: selectedAddress.city,
+      state: selectedAddress.state,
+      country: selectedAddress.country,
+      postalCode: selectedAddress.postalCode
+    }))
+      .unwrap()
+      .then((methods) => {
+        setShippingMethods(methods || [])
+        if ((methods || []).length > 0 && !selectedShippingMethod) {
           setSelectedShippingMethod(methods[0])
         }
-      } catch (error) {
+      })
+      .catch((error) => {
         console.error('Error fetching shipping methods:', error)
         showToast('Failed to load shipping methods', 'error')
-        // Fallback to default shipping method
         setShippingMethods([{
           id: 'standard',
           name: 'Standard',
@@ -1161,12 +1146,10 @@ export default function CheckoutPage() {
           deliveryTime: '3 - 5 Days',
           cost: 9
         })
-      } finally {
+      })
+      .finally(() => {
         setLoadingShippingMethods(false)
-      }
-    }
-
-    fetchShippingMethods()
+      })
   }, [selectedAddress, showToast])
   
   // Clear validation error when address is selected
@@ -1781,33 +1764,12 @@ export default function CheckoutPage() {
       }
 
       console.log('📤 Creating checkout session...')
-      console.log('🔗 Endpoint:', paymentEndpoints.stripeHostedCheckout)
       console.log('📦 Payload:', body)
 
-
-
-      const res = await fetch(paymentEndpoints.stripeHostedCheckout, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-      })
-
-      console.log('📥 Response status:', res.status)
-
-      if (!res.ok) {
-        const text = await res.text()
-        console.error('❌ API Error:', text)
-        alert(`Checkout failed: ${text.substring(0, 100)}`)
-        throw new Error(text)
-      }
-
-      const { data } = await res.json()
+      const data = await dispatch(createStripeHostedCheckoutSession(body)).unwrap()
       console.log('✅ Session created:', data)
 
-      if (!data.sessionId) {
+      if (!data?.sessionId) {
         console.error('❌ No session ID in response')
         alert('Checkout session creation failed. Please try again.')
         return
@@ -1859,13 +1821,13 @@ export default function CheckoutPage() {
         return
       }
 
-      // Build checkout payload
+      // Build checkout payload for cash-wallet API (backendcart.qliq.ae/api/payment/cash-wallet/checkout)
       const checkoutPayload = {
         items: cartItems.map(item => ({
-          productId: item.productId || item.id,
+          productId: (item.productId || item.id)?.toString?.() || item.productId || item.id,
           name: item.name || 'Product',
-          price: item.price || 0,
-          quantity: item.quantity || 1,
+          price: Number(item.price) || 0,
+          quantity: Number(item.quantity) || 1,
           image: item.image || null
         })),
         currency: 'aed',
@@ -1887,69 +1849,28 @@ export default function CheckoutPage() {
           phone: selectedAddress.phone,
           email: selectedAddress.email
         },
-        shippingAddress: shippingSameAsDelivery ? {
-          fullName: selectedAddress.fullName,
-          addressLine1: selectedAddress.addressLine1,
-          city: selectedAddress.city,
-          state: selectedAddress.state,
-          postalCode: selectedAddress.postalCode,
-          country: selectedAddress.country,
-          phone: selectedAddress.phone,
-          email: selectedAddress.email
-        } : null,
-        shippingMethod: selectedShippingMethod?.id || selectedShippingMethod?.methodId || 'standard',
+        shippingMethod: (selectedShippingMethod?.id || selectedShippingMethod?.methodId || 'standard').toString(),
         shippingMethodName: selectedShippingMethod?.name || selectedShippingMethod?.methodName || 'Standard Delivery',
-        shippingMethodTime: selectedShippingMethod?.deliveryTime || selectedShippingMethod?.estimatedDelivery || selectedShippingMethod?.time,
-        shippingMethodCost: shippingCost,
-        shippingCost: shippingCost
+        shippingMethodCost: Number(shippingCost)
       }
 
       console.log('📡 [CASH WALLET PAYMENT] Calling checkout API:', checkoutPayload)
-      
-      const response = await fetch(paymentEndpoints.cashWalletCheckout, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(checkoutPayload)
-      })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ [CASH WALLET PAYMENT] Failed:', response.status, errorText)
-        try {
-          const errorData = JSON.parse(errorText)
-          showToast(errorData.message || 'Failed to process cash wallet payment.', 'error')
-        } catch {
-          showToast('Failed to process cash wallet payment. Please try again.', 'error')
-        }
+      let result
+      try {
+        result = await dispatch(createCashWalletCheckout(checkoutPayload)).unwrap()
+        console.log('✅ [CASH WALLET PAYMENT] Success:', result)
+      } catch (err) {
+        console.error('❌ [CASH WALLET PAYMENT] Failed:', err)
+        showToast(err?.message || 'Failed to process cash wallet payment. Please try again.', 'error')
         return
       }
 
-      const result = await response.json()
-      console.log('✅ [CASH WALLET PAYMENT] Success:', result)
-
-      // Redeem cash wallet amount after successful order
+      // Redeem cash wallet amount after successful order (via slice)
       try {
         console.log('💸 [CASH WALLET REDEEM] Calling redeem API for amount:', cashWalletDiscountAmount)
-        const redeemResponse = await fetch('https://backendwallet.qliq.ae/api/wallet/cash/redeem', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            amountInAed: cashWalletDiscountAmount.toFixed(2)
-          })
-        })
-        
-        if (redeemResponse.ok) {
-          const redeemResult = await redeemResponse.json()
-          console.log('✅ [CASH WALLET REDEEM] Success:', redeemResult)
-        } else {
-          console.error('❌ [CASH WALLET REDEEM] Failed:', redeemResponse.status)
-        }
+        await dispatch(redeemCash({ amountInAed: cashWalletDiscountAmount.toFixed(2) })).unwrap()
+        console.log('✅ [CASH WALLET REDEEM] Success')
       } catch (redeemError) {
         console.error('❌ [CASH WALLET REDEEM] Error:', redeemError)
       }
@@ -1963,11 +1884,9 @@ export default function CheckoutPage() {
       // Show success toast briefly then redirect
       showToast('Payment successful with Cash Wallet!', 'success')
       
-      // Use router.push for proper Next.js navigation
-      const orderId = result.data?.order?._id || result.data?.orderId || ''
+      // Redirect to success page with order_id (same pattern as Stripe success redirect)
+      const orderId = (result && (result?.data?.order?._id || result?.data?.orderId || result?.order?._id || result?.orderId)) || ''
       const redirectUrl = `/checkout/success?payment_method=cash_wallet${orderId ? `&order_id=${orderId}` : ''}`
-      
-      // Small delay to allow toast to show, then redirect
       setTimeout(() => {
         window.location.replace(redirectUrl)
       }, 500)
@@ -2252,7 +2171,7 @@ export default function CheckoutPage() {
                   const daysRemaining = calculateDaysRemaining(qoynExpiryDate)
                   
                   if (daysRemaining !== null) {
-                    return `${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'} remaining`
+                    return `Expires in ${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'}`
                   } else {
                     return 'No expiry is available'
                   }
@@ -2386,7 +2305,7 @@ export default function CheckoutPage() {
 
               {/* Address Form */}
               {showAddressForm && (
-                <form className={styles.addressForm} onSubmit={handleAddressSubmit}>
+                <form className={styles.addressForm} onSubmit={handleAddressSubmit} noValidate>
                   {error && (
                     <div className={styles.errorMessage}>
                       {error}
@@ -2631,7 +2550,7 @@ export default function CheckoutPage() {
                 </div>
               )}
               {!shippingSameAsDelivery && showShippingForm && (
-                <form className={styles.addressForm} onSubmit={handleAddressSubmit}>
+                <form className={styles.addressForm} onSubmit={handleAddressSubmit} noValidate>
                   <div className={styles.addressFormTabs}>
                     <button
                       type="button"

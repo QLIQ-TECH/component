@@ -127,7 +127,7 @@ export default function Home() {
   useEffect(() => {
     dispatch(fetchHypermarketStores())
     dispatch(fetchProducts())
-    dispatch(fetchProductsByCategory({ categoryId: hypermarketCategoryId, limit: 200 }))
+    dispatch(fetchProductsByCategory({ categoryId: hypermarketCategoryId, limit: 210 }))
   }, [dispatch])
 
   // Fetch fastest delivery stores when location is available
@@ -138,8 +138,8 @@ export default function Home() {
         longitude: userLocation.longitude,
         storeType: 'hypermarket'
       }))
-      dispatch(fetchBestCheapDeals({ storeType: 'hypermarket', page: 1, limit: 20 }))
-      dispatch(fetchBestBundleDeals({ storeType: 'hypermarket', page: 1, limit: 20 }))
+      dispatch(fetchBestCheapDeals({ storeType: 'hypermarket', page: 1, limit: 21 }))
+      dispatch(fetchBestBundleDeals({ storeType: 'hypermarket', page: 1, limit: 21 }))
     }
   }, [userLocation, dispatch])
 

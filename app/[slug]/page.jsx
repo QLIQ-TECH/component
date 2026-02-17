@@ -208,71 +208,9 @@ export default function BrandPage() {
           console.error('Error fetching store filter data:', error)
         }
       } else if (categoryLevel && slug && !isStorePage) {
-        // Fetch category filters with selected filters for accurate counts
+        // Fetch category filters once (same as brand) - do NOT pass selected filters so the filter options stay stable
         try {
-          // Build filter params for the category filters API
-          const filterParams = new URLSearchParams()
-          
-          // Price filter
-          if (debouncedFilters.price?.min !== undefined && debouncedFilters.price?.min !== '') {
-            filterParams.append('min_price', debouncedFilters.price.min)
-          }
-          if (debouncedFilters.price?.max !== undefined && debouncedFilters.price?.max !== '') {
-            filterParams.append('max_price', debouncedFilters.price.max)
-          }
-          
-          // Availability filter
-          if (debouncedFilters.availability instanceof Set) {
-            if (debouncedFilters.availability.has('in') && !debouncedFilters.availability.has('out')) {
-              filterParams.append('in_stock', 'true')
-            } else if (debouncedFilters.availability.has('out') && !debouncedFilters.availability.has('in')) {
-              filterParams.append('in_stock', 'false')
-            }
-          }
-          
-          // Rating filter
-          if (typeof debouncedFilters.rating === 'number') {
-            filterParams.append('min_rating', debouncedFilters.rating)
-          }
-          
-          // Brand filter from filters (multiple) - brands should navigate to their own page, not watches
-          // Only apply brand filter if user manually selects it from filters
-          if (debouncedFilters.brand instanceof Set && debouncedFilters.brand.size > 0) {
-            // Brand filter from filters (multiple)
-            Array.from(debouncedFilters.brand).forEach(b => filterParams.append('brand_id', b))
-          }
-          
-          // Store filter from query params (when clicking icon) - takes priority
-          if (storeId) {
-            filterParams.append('store_id', storeId)
-          } else if (debouncedFilters.store instanceof Set && debouncedFilters.store.size > 0) {
-            // Store filter from filters (multiple)
-            Array.from(debouncedFilters.store).forEach(s => filterParams.append('store_id', s))
-          }
-          
-          // Dynamic attribute filters (attr.*)
-          Object.keys(debouncedFilters).forEach(key => {
-            if (key.startsWith('attr.')) {
-              const attrKey = key.substring(5)
-              const values = debouncedFilters[key] instanceof Set ? Array.from(debouncedFilters[key]) : []
-              values.forEach(v => filterParams.append(`attr_${attrKey}`, v))
-            }
-          })
-          
-          // Dynamic specification filters (spec.*)
-          Object.keys(debouncedFilters).forEach(key => {
-            if (key.startsWith('spec.')) {
-              const specKey = key.substring(5)
-              const values = debouncedFilters[key] instanceof Set ? Array.from(debouncedFilters[key]) : []
-              values.forEach(v => filterParams.append(`spec_${specKey}`, v))
-            }
-          })
-          
-          const url = filterParams.toString() 
-            ? `${search.categoryFilters(slug, categoryLevel)}&${filterParams.toString()}`
-            : search.categoryFilters(slug, categoryLevel)
-          
-          const response = await fetch(url)
+          const response = await fetch(search.categoryFilters(slug, categoryLevel))
           if (response.ok) {
             const data = await response.json()
             console.log('Category Filter API Response:', data)
@@ -301,7 +239,20 @@ export default function BrandPage() {
     }
 
     fetchFilterData()
-  }, [slug, categoryLevel, storeId, categoryId, source, debouncedFilters])
+    // Category and brand: do not depend on debouncedFilters so filter options stay stable (same as brand)
+  }, [slug, categoryLevel, storeId, categoryId, source])
+
+  // Sync selectedFilters from URL so store shows as selected when storeId is in URL
+  useEffect(() => {
+    if (!storeId) return
+    setSelectedFilters(prev => {
+      const storeSet = prev.store instanceof Set ? new Set(prev.store) : new Set()
+      const alreadyHas = Array.from(storeSet).some(s => String(s) === String(storeId))
+      if (alreadyHas) return prev
+      storeSet.add(storeId)
+      return { ...prev, store: storeSet }
+    })
+  }, [storeId])
 
   // Debounce filter changes to allow multiple selections
   useEffect(() => {
@@ -442,7 +393,7 @@ export default function BrandPage() {
               
               // Add pagination params
               params.append('page', currentPage.toString())
-              params.append('limit', '20')
+              params.append('limit', '21')
               
               // Add sort parameter
               params.append('sort', sortBy)
@@ -502,7 +453,7 @@ export default function BrandPage() {
                     level4: cleanedCategoryId,
                     storeId: actualStoreId, // For hypermarket/supermarket/store
                     page: currentPage,
-                    limit: 20,
+                    limit: 21,
                     sort: sortBy,
                     in_stock: true
                   };
@@ -755,7 +706,7 @@ export default function BrandPage() {
                     level4: cleanedCategoryId,
                     storeId: cleanedStoreId,
                     page: currentPage,
-                    limit: 20,
+                    limit: 21,
                     sort: sortBy
                   };
                   
@@ -869,7 +820,7 @@ export default function BrandPage() {
               
               // Add pagination params
               params.append('page', currentPage.toString())
-              params.append('limit', '20')
+              params.append('limit', '21')
               
               // Add sort parameter
               params.append('sort', sortBy)
@@ -981,14 +932,20 @@ export default function BrandPage() {
                   
                   let newProducts = data.data.products || []
                   
-                  // Filter products by store_id if storeId is present
-                  if (storeId && newProducts.length > 0) {
-                    newProducts = newProducts.filter(product => {
-                      // Check if product has store_id and it matches the current storeId
-                      const productStoreId = product.store_id?._id || product.store_id;
-                      return productStoreId === storeId || String(productStoreId) === String(storeId);
-                    });
-                    console.log(`Filtered products by store_id ${storeId}: ${newProducts.length} products found`);
+                  // Filter by selected store(s): multiple stores from filter, or single storeId from URL
+                  if (newProducts.length > 0) {
+                    const storeSet = debouncedFilters.store instanceof Set && debouncedFilters.store.size > 0 ? debouncedFilters.store : null
+                    if (storeSet && storeSet.size > 0) {
+                      const idSet = new Set(Array.from(storeSet).map(s => String(s)))
+                      newProducts = newProducts.filter(p => idSet.has(String(p.store_id?._id || p.store_id)))
+                      console.log(`Filtered products by ${storeSet.size} store(s): ${newProducts.length} products found`)
+                    } else if (storeId) {
+                      newProducts = newProducts.filter(product => {
+                        const productStoreId = product.store_id?._id || product.store_id
+                        return productStoreId === storeId || String(productStoreId) === String(storeId)
+                      })
+                      console.log(`Filtered products by store_id ${storeId}: ${newProducts.length} products found`)
+                    }
                   }
                   
                   setBrandProducts(newProducts)
@@ -1013,7 +970,7 @@ export default function BrandPage() {
             
             // Add pagination params
             params.append('page', currentPage.toString())
-            params.append('limit', '20')
+            params.append('limit', '21')
             
             // Add sort parameter
             params.append('sort', sortBy)
@@ -1091,14 +1048,20 @@ export default function BrandPage() {
                 
                 let newProducts = data.data.products || []
                 
-                // Filter products by store_id if storeId is present (when on a store page)
-                if (storeId && newProducts.length > 0) {
-                  newProducts = newProducts.filter(product => {
-                    // Check if product has store_id and it matches the current storeId
-                    const productStoreId = product.store_id?._id || product.store_id;
-                    return productStoreId === storeId || String(productStoreId) === String(storeId);
-                  });
-                  console.log(`Filtered products by store_id ${storeId}: ${newProducts.length} products found`);
+                // Filter by selected store(s): multiple stores from filter, or single storeId from URL
+                if (newProducts.length > 0) {
+                  const storeSet = debouncedFilters.store instanceof Set && debouncedFilters.store.size > 0 ? debouncedFilters.store : null
+                  if (storeSet && storeSet.size > 0) {
+                    const idSet = new Set(Array.from(storeSet).map(s => String(s)))
+                    newProducts = newProducts.filter(p => idSet.has(String(p.store_id?._id || p.store_id)))
+                    console.log(`Filtered products by ${storeSet.size} store(s): ${newProducts.length} products found`)
+                  } else if (storeId) {
+                    newProducts = newProducts.filter(product => {
+                      const productStoreId = product.store_id?._id || product.store_id
+                      return productStoreId === storeId || String(productStoreId) === String(storeId)
+                    })
+                    console.log(`Filtered products by store_id ${storeId}: ${newProducts.length} products found`)
+                  }
                 }
                 
                 setBrandProducts(newProducts)
@@ -1156,7 +1119,7 @@ export default function BrandPage() {
     }
 
     if (paginationInfo?.total) {
-      return Math.max(1, Math.ceil(paginationInfo.total / 20))
+      return Math.max(1, Math.ceil(paginationInfo.total / 21))
     }
 
     return 1
@@ -1167,7 +1130,7 @@ export default function BrandPage() {
     if (totalResults === 0 || brandProducts.length === 0) {
       return { start: 0, end: 0 }
     }
-    const pageSize = 20
+    const pageSize = 21
     const start = (currentPage - 1) * pageSize + 1
     const end = Math.min(currentPage * pageSize, totalResults)
     return { start, end }

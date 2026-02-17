@@ -63,28 +63,28 @@ export function buildFacetsFromCategoryFilters(filterData) {
   //   }
   // }
 
-  // Brands
+  // Brands - use _id as value so API receives brand_id correctly
   if (filterData.brands && Array.isArray(filterData.brands) && filterData.brands.length > 0) {
     facets.push({
       key: 'brand',
       label: 'Brand',
       type: 'checkbox',
       options: filterData.brands.map(b => ({
-        value: b.name || b._id,
+        value: b._id || b.id || b.name,
         label: b.name || 'Unknown',
         count: b.count || 0
       }))
     })
   }
 
-  // Stores
+  // Stores - use _id as value so API receives store_id and selection matches URL storeId
   if (filterData.stores && Array.isArray(filterData.stores) && filterData.stores.length > 0) {
     facets.push({
       key: 'store',
       label: 'Store',
       type: 'checkbox',
       options: filterData.stores.map(s => ({
-        value: s.name || s._id,
+        value: s._id || s.id || s.name,
         label: s.name || 'Unknown',
         count: s.count || 0
       }))

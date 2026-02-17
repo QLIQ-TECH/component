@@ -66,14 +66,14 @@ export function buildFacetsFromBrandFilters(filterData) {
   // Brand filter - NOT mapped on brand pages (user is already viewing a specific brand)
   // Even if filterData.brands or filterData.brand exists, we don't include it as a filter option
 
-  // Stores
+  // Stores - use _id as value so API receives store_id and selection matches URL storeId
   if (filterData.stores && Array.isArray(filterData.stores) && filterData.stores.length > 0) {
     facets.push({
       key: 'store',
       label: 'Store',
       type: 'checkbox',
       options: filterData.stores.map(s => ({
-        value: s.name || s._id,
+        value: s._id || s.id || s.name,
         label: s.name || 'Unknown',
         count: s.count || 0
       }))

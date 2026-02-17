@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, Fragment } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import styles from './orders.module.css'
@@ -401,8 +401,9 @@ export default function Orders({ orders }) {
           
           // Multiple orders - render each order separately
           return (
-            <>
-              {group.map((order) => {
+            <Fragment key={groupId}>
+              {group.map((order, orderIndex) => {
+                const orderKey = order._id || order.orderNumber || `order-${groupIndex}-${orderIndex}`
                 const orderItems = order.items || []
                 const firstItem = orderItems[0]
                 const totalProducts = getTotalProductsCount(order)
@@ -410,7 +411,7 @@ export default function Orders({ orders }) {
                 
                 if (orderItems.length === 0) {
                   return (
-                    <div key={order._id} className={styles.orderItem}>
+                    <div key={orderKey} className={styles.orderItem}>
                       <div className={styles.orderInfoSection}>
                         <div className={styles.orderRow}>
                           <div className={styles.orderStatus}>{order.status}</div>
@@ -444,7 +445,7 @@ export default function Orders({ orders }) {
                 }
                 
                 return (
-                  <div key={order._id} className={styles.orderGroup}>
+                  <div key={orderKey} className={styles.orderGroup}>
                     <div className={styles.orderItem}>
                       <div className={styles.orderImageSection}>
                         {firstItem ? (
@@ -485,15 +486,15 @@ export default function Orders({ orders }) {
                             onClick={(e) => handleProductsClick(order, e)}
                             style={{ cursor: 'pointer' }}
                           >
-                            Products
-                          </span> : <span className={styles.productsNumber}>{productCount}</span>
+                          Products
+                        </span> : <span className={styles.productsNumber}>{productCount}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                 )
               })}
-            </>
+            </Fragment>
           )
         })}
         </div>
