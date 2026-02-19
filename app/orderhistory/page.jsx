@@ -791,13 +791,16 @@ const OrderHistoryPage = () => {
   };
 
   // Calculate discounted price and discount amount for an item.
-  // Prefer product-level discount (discountName, discountAmount or discountPercentage), then order-level gig_completion.
+  // Only show product-level discount (discountName, discountAmount or discountPercentage).
+  // Do NOT display order-level gig_completion near products - only show offers/coupons when present on the product.
   const getItemPriceDetails = (item, order) => {
     const basePrice = Number(item?.unitPrice ?? item?.price ?? 0) || 0;
     const qty = Math.max(1, Number(item?.quantity) || 1);
 
-    // 1) Product-level discount: item has discountName and either discountAmount or discountPercentage
-    const hasItemDiscount = item?.discountName && (Number(item?.discountAmount) > 0 || Number(item?.discountPercentage) > 0);
+    // Product-level discount only: item has discountName and either discountAmount or discountPercentage.
+    // Never display gig_completion - exclude when discountName indicates gig completion (e.g. "Gig Completion").
+    const isGigCompletionDiscount = item?.discountName && /gig\s*completion|completion\s*discount/i.test(String(item.discountName));
+    const hasItemDiscount = !isGigCompletionDiscount && item?.discountName && (Number(item?.discountAmount) > 0 || Number(item?.discountPercentage) > 0);
     if (hasItemDiscount) {
       let discountPerUnit = 0;
       let discountPercentage = 0;
@@ -822,30 +825,7 @@ const OrderHistoryPage = () => {
       };
     }
 
-    // 2) Order-level: discountType is gig_completion
-    if (order?.discountType === 'gig_completion' && order?.discount > 0) {
-      const totalDiscount = Number(order.discount) || 0;
-      const orderSubtotal = getItemsSubtotal(order);
-
-      if (orderSubtotal > 0) {
-        const itemTotal = basePrice * qty;
-        const discountProportion = itemTotal / orderSubtotal;
-        const itemDiscount = totalDiscount * discountProportion;
-        const discountPerUnit = itemDiscount / qty;
-        const discountedPrice = basePrice - discountPerUnit;
-        const pct = basePrice > 0 ? (discountPerUnit / basePrice) * 100 : 0;
-
-        return {
-          originalPrice: basePrice,
-          discountAmount: Number(discountPerUnit.toFixed(2)),
-          discountedPrice: Math.max(0, Number(discountedPrice.toFixed(2))),
-          discountPercentage: Number(pct.toFixed(2)),
-          discountType: order.discountType,
-          discountName: null
-        };
-      }
-    }
-
+    // No product-level discount - do not display any discount (including gig_completion)
     return {
       originalPrice: basePrice,
       discountAmount: 0,
@@ -1376,7 +1356,7 @@ const OrderHistoryPage = () => {
                         <div className={styles.productNumber}>#{index + 1}</div>
                         {(() => {
                           const priceDetails = getItemPriceDetails(item, orderData);
-                          const hasDiscount = priceDetails.discountAmount > 0;
+                          const hasDiscount = priceDetails.discountAmount > 0 && priceDetails.discountType !== 'gig_completion';
                           const discountLabel = priceDetails.discountName
                             ? `${priceDetails.discountName} (${priceDetails.discountPercentage}% OFF)`
                             : priceDetails.discountType
