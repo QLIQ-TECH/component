@@ -43,7 +43,7 @@ export default function NewAddress({ onCancel, onSave }) {
   const autocompleteInstanceRef = useRef(null)
   const citiesZonesRef = useRef({ cities: [], zones: [] })
 
-  const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY || ''
+  const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY || 'AIzaSyDdZ_Y4ANv6qnyWeBebbWA6YoKqMd-o-4Y'
 
   // Map country names to ISO country codes for Google Places API
   const getCountryCode = (countryName) => {
@@ -167,7 +167,8 @@ export default function NewAddress({ onCancel, onSave }) {
     let isMounted = true
     let observer = null
 
-    const initializeAutocomplete = async () => {
+    const initializeAutocomplete = async (retryCount = 0) => {
+      const maxRetries = 5
       // Only initialize if API key is available
       if (!GOOGLE_API_KEY) {
         return
@@ -186,9 +187,12 @@ export default function NewAddress({ onCancel, onSave }) {
           return
         }
 
-        // Get the input element
+        // Get the input element (may not exist yet if tab just mounted)
         const addressInput = document.getElementById('new-address-line-1-autocomplete')
         if (!addressInput) {
+          if (retryCount < maxRetries && isMounted) {
+            setTimeout(() => initializeAutocomplete(retryCount + 1), 150 * (retryCount + 1))
+          }
           return
         }
 
@@ -269,15 +273,11 @@ export default function NewAddress({ onCancel, onSave }) {
         addressInput.addEventListener('focus', debouncedStyle)
         addressInput.addEventListener('input', debouncedStyle)
 
-        // Handle place selection
+        // Handle place selection - always update displayed address (even when geometry is missing)
         autocomplete.addListener('place_changed', () => {
           const place = autocomplete.getPlace()
-          
-          if (!place.geometry || !place.geometry.location) {
-            return
-          }
 
-          // Extract address components
+          // Extract address components (always do this so we can display address)
           const addressComponents = place.address_components || []
           let streetNumber = ''
           let route = ''
@@ -303,24 +303,25 @@ export default function NewAddress({ onCancel, onSave }) {
             }
           })
 
-          // Use place name for establishments, otherwise use formatted address
-          const addressLine1 = place.name && place.types?.includes('establishment') 
-            ? `${place.name}, ${place.formatted_address}`
-            : place.formatted_address || [streetNumber, route].filter(Boolean).join(' ')
+          // Use place name for establishments, otherwise use formatted address (always show something)
+          const addressLine1 = place.name && place.types?.includes('establishment')
+            ? `${place.name}, ${place.formatted_address || ''}`
+            : (place.formatted_address || [streetNumber, route].filter(Boolean).join(' ') || place.name || addressInput?.value || '')
 
-          // Get latitude and longitude
-          const latitude = place.geometry.location.lat()
-          const longitude = place.geometry.location.lng()
+          // Get latitude and longitude only when geometry is present
+          const hasGeometry = place.geometry && place.geometry.location
+          const latitude = hasGeometry ? place.geometry.location.lat() : null
+          const longitude = hasGeometry ? place.geometry.location.lng() : null
 
           console.log('📍 Extracted address components:', { city, state, country, postalCode })
 
-          // Update form with extracted data including coordinates
+          // Always update form so the address displays; include lat/long only when available
           setFormData(prev => ({
             ...prev,
             addressLine1: addressLine1,
             ...(postalCode && { postalCode: postalCode }),
-            latitude: latitude,
-            longitude: longitude
+            ...(latitude != null && { latitude }),
+            ...(longitude != null && { longitude })
           }))
 
           // Step 1: Auto-fill country if found
@@ -669,7 +670,7 @@ export default function NewAddress({ onCancel, onSave }) {
         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc vulputate libero
         et velit interdum, ac aliquet odio mattis.
       </p> */}
-      <form className={styles.form} onSubmit={handleSubmit}>
+      <form className={styles.form} onSubmit={handleSubmit} noValidate>
         <div className={styles.labelRow}>
           <button 
             type="button" 

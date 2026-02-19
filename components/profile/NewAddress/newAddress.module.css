@@ -5,6 +5,15 @@
   padding: 12px 0px 40px 12px ;
 }
 
+/* Ensure Google Places autocomplete dropdown is visible above modals/tabs */
+.newAddressContainer :global(.pac-container) {
+  z-index: 10000 !important;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin-top: 4px;
+  overflow: visible;
+}
+
 .title {
   font-size: 40px;
   font-weight: 600;
@@ -161,3 +170,4 @@
     gap: 12px;
   }
 }
+

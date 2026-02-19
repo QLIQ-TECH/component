@@ -100,40 +100,71 @@ export default function Orders({ orders }) {
       .join(' ') + ' Discount';
   };
 
-  // Calculate discounted price and discount amount for an item when discountType is gig_completion
+  // Calculate discounted price and discount amount for an item.
+  // Prefer product-level discount (discountName, discountAmount or discountPercentage), then order-level gig_completion.
   const getItemPriceDetails = (item, order) => {
     const basePrice = Number(item?.unitPrice ?? item?.price ?? 0) || 0;
-    
-    // If discountType is gig_completion, calculate discounted price
+    const qty = Math.max(1, Number(item?.quantity) || 1);
+
+    // 1) Product-level discount: item has discountName and either discountAmount or discountPercentage
+    const hasItemDiscount = item?.discountName && (Number(item?.discountAmount) > 0 || Number(item?.discountPercentage) > 0);
+    if (hasItemDiscount) {
+      let discountPerUnit = 0;
+      let discountPercentage = 0;
+
+      if (Number(item.discountPercentage) > 0) {
+        // Discount is percentage: discountPerUnit = basePrice * (percentage / 100)
+        discountPercentage = Number(item.discountPercentage);
+        discountPerUnit = (basePrice * discountPercentage) / 100;
+      } else if (Number(item.discountAmount) > 0) {
+        // Discount is fixed amount per unit
+        discountPerUnit = Number(item.discountAmount);
+        discountPercentage = basePrice > 0 ? (discountPerUnit / basePrice) * 100 : 0;
+      }
+
+      const discountedPrice = Math.max(0, basePrice - discountPerUnit);
+
+      return {
+        originalPrice: basePrice,
+        discountAmount: Number(discountPerUnit.toFixed(2)),
+        discountedPrice: Number(discountedPrice.toFixed(2)),
+        discountPercentage: Number(discountPercentage.toFixed(2)),
+        discountType: null,
+        discountName: item.discountName
+      };
+    }
+
+    // 2) Order-level: discountType is gig_completion
     if (order?.discountType === 'gig_completion' && order?.discount > 0) {
       const totalDiscount = Number(order.discount) || 0;
       const orderSubtotal = getItemsSubtotal(order);
-      
+
       if (orderSubtotal > 0) {
-        // Calculate discount proportion for this item
-        const itemTotal = basePrice * (Number(item?.quantity) || 1);
+        const itemTotal = basePrice * qty;
         const discountProportion = itemTotal / orderSubtotal;
         const itemDiscount = totalDiscount * discountProportion;
-        const discountPerUnit = itemDiscount / (Number(item?.quantity) || 1);
+        const discountPerUnit = itemDiscount / qty;
         const discountedPrice = basePrice - discountPerUnit;
-        const discountPercentage = basePrice > 0 ? ((discountPerUnit / basePrice) * 100) : 0;
-        
+        const pct = basePrice > 0 ? (discountPerUnit / basePrice) * 100 : 0;
+
         return {
           originalPrice: basePrice,
           discountAmount: Number(discountPerUnit.toFixed(2)),
           discountedPrice: Math.max(0, Number(discountedPrice.toFixed(2))),
-          discountPercentage: Number(discountPercentage.toFixed(2)),
-          discountType: order.discountType
+          discountPercentage: Number(pct.toFixed(2)),
+          discountType: order.discountType,
+          discountName: null
         };
       }
     }
-    
+
     return {
       originalPrice: basePrice,
       discountAmount: 0,
       discountedPrice: basePrice,
       discountPercentage: 0,
-      discountType: null
+      discountType: null,
+      discountName: null
     };
   };
 
@@ -539,7 +570,12 @@ export default function Orders({ orders }) {
                       {(() => {
                         const priceDetails = getItemPriceDetails(item, selectedOrder);
                         const hasDiscount = priceDetails.discountAmount > 0;
-                        
+                        const discountLabel = priceDetails.discountName
+                          ? `${priceDetails.discountName} (${priceDetails.discountPercentage}% OFF)`
+                          : priceDetails.discountType
+                            ? `${formatDiscountType(priceDetails.discountType)} (${priceDetails.discountPercentage}% OFF)`
+                            : `${priceDetails.discountPercentage}% OFF`;
+
                         return (
                           <div className={orderHistoryStyles.productPriceContainer}>
                             {hasDiscount ? (
@@ -548,7 +584,7 @@ export default function Orders({ orders }) {
                                   AED {priceDetails.originalPrice.toFixed(2)}
                                 </p>
                                 <p className={orderHistoryStyles.discountType}>
-                                  {formatDiscountType(priceDetails.discountType)} ({priceDetails.discountPercentage}% OFF)
+                                  {discountLabel}
                                 </p>
                                 <p className={orderHistoryStyles.discountAmount}>
                                   - AED {priceDetails.discountAmount.toFixed(2)}

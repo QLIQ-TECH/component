@@ -172,12 +172,12 @@ export default function ProfilePage() {
             </p>
           </div>
           <div className={styles.actionTop}>
-            <button className={styles.goLiveBtn} onClick={handleGoLiveClick}>Go to QLIQ Live</button>
+            <button className={styles.goLiveBtn} onClick={handleGoLiveClick}>Go to IQLIQ Live</button>
             <button 
               className={styles.upgradeBtn}
               onClick={() => setComingSoonOpen(true)}
             >
-              Upgrade to QLIQ Plus
+              Upgrade to IQLIQ Plus
             </button>
           </div>
         </div>

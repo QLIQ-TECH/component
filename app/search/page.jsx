@@ -98,13 +98,24 @@ export default function SearchPage() {
     return 1
   }, [searchPagination, pageSize])
 
-  // Use searchResults directly (already paginated by API)
+  // Use searchResults; when sorting by price, sort by discount price (effective price) on the frontend
   const displayResults = useMemo(() => {
     if (!Array.isArray(searchResults)) {
       return []
     }
+    const getEffectivePrice = (p) => {
+      const discount = p.discount_price != null && Number(p.discount_price) > 0 ? Number(p.discount_price) : null
+      return discount !== null ? discount : (Number(p.price) || 0)
+    }
+    if (sortBy === 'price_asc' || sortBy === 'price_desc') {
+      return [...searchResults].sort((a, b) => {
+        const pa = getEffectivePrice(a)
+        const pb = getEffectivePrice(b)
+        return sortBy === 'price_asc' ? pa - pb : pb - pa
+      })
+    }
     return searchResults
-  }, [searchResults])
+  }, [searchResults, sortBy])
 
   // Calculate the range of products displayed on current page
   const productRange = useMemo(() => {

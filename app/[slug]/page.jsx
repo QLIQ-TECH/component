@@ -1082,8 +1082,22 @@ export default function BrandPage() {
     fetchData()
   }, [slug, storeId, categoryLevel, categoryId, source, debouncedFilters, currentPage, sortBy])
 
-  // Transform API data
-  const transformedProducts = brandProducts.map(transformProductData)
+  // Transform API data; when sorting by price, sort by discount price (effective price) on the frontend
+  const transformedProducts = useMemo(() => {
+    const getEffectivePrice = (p) => {
+      const discount = p.discount_price != null && Number(p.discount_price) > 0 ? Number(p.discount_price) : null
+      return discount !== null ? discount : (Number(p.price) || 0)
+    }
+    if (sortBy === 'price_asc' || sortBy === 'price_desc') {
+      const sorted = [...brandProducts].sort((a, b) => {
+        const pa = getEffectivePrice(a)
+        const pb = getEffectivePrice(b)
+        return sortBy === 'price_asc' ? pa - pb : pb - pa
+      })
+      return sorted.map(transformProductData)
+    }
+    return brandProducts.map(transformProductData)
+  }, [brandProducts, sortBy])
 
   // Build facets from filter API response for category, brand, or store pages
   const facets = useMemo(() => {
