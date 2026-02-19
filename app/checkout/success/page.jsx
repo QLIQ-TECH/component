@@ -164,35 +164,34 @@ export default function CheckoutSuccessPage() {
     }
   }
 
-  // Function to notify gig completion purchase
-  const notifyGigCompletionPurchase = async (order) => {
+  // Notify gig-completions/purchase API only when sales gig was used (pending in sessionStorage).
+  // If no gig was used, this does nothing. Called after every successful order.
+  const notifyGigCompletionPurchaseIfUsed = async (order) => {
     try {
-      console.log('🎯 [GIG COMPLETION] Checking for pending gig completion purchase...')
-      
       const pendingGigPurchase = sessionStorage.getItem('pendingGigCompletionPurchase')
       if (!pendingGigPurchase) {
-        console.log('⚠️ [GIG COMPLETION] No pending gig completion purchase found - sales gig may not have been used')
-        return
+        return // No gig used – do not call API
       }
 
       const gigInfo = JSON.parse(pendingGigPurchase)
-      console.log('✅ [GIG COMPLETION] Found pending gig completion purchase:', gigInfo)
-
-      if (!gigInfo.discountCode) {
-        console.log('⚠️ [GIG COMPLETION] Invalid gig completion info, skipping purchase notification')
+      if (!gigInfo?.discountCode) {
         sessionStorage.removeItem('pendingGigCompletionPurchase')
         return
       }
 
-      // Get order ID - try multiple fields
       const orderId = order?.orderNumber || order?.orderId || order?._id || order?.id
-      if (!orderId) {
+      const orderIdStr = orderId != null ? String(orderId) : ''
+      if (!orderIdStr) {
         console.error('❌ [GIG COMPLETION] Order ID not found, cannot notify purchase')
         return
       }
 
-      // Calculate commission based on product prices only (sum of items), not subtotal which may include VAT
-      // Commission should be calculated on the actual product price before any taxes or fees
+      const token = await getAuthToken()
+      if (!token) {
+        console.error('❌ [GIG COMPLETION] No auth token available')
+        return
+      }
+
       const orderItems = order?.items || []
       const orderCurrency = order?.currency || 'aed'
       
@@ -202,123 +201,45 @@ export default function CheckoutSuccessPage() {
         const itemQuantity = item.quantity || 1
         return sum + (itemPrice * itemQuantity)
       }, 0)
+      const productPriceInAED = totalProductPrice > 0 ? totalProductPrice : 0
 
-      if (!totalProductPrice || totalProductPrice <= 0) {
-        console.error('❌ [GIG COMPLETION] Order items not found or total product price is invalid, cannot calculate commission')
-        console.error('❌ [GIG COMPLETION] Order items:', orderItems)
-        return
-      }
-
-      console.log('📊 [GIG COMPLETION] Product price calculation:', {
-        itemsCount: orderItems.length,
-        totalProductPrice: totalProductPrice.toFixed(2),
-        items: orderItems.map(item => ({
-          productId: item.productId,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          subtotal: (item.price * item.quantity).toFixed(2)
-        }))
-      })
-
-      // Fetch gig completion details to get commission percentage
-      const token = await getAuthToken()
-      if (!token) {
-        console.error('❌ [GIG COMPLETION] No auth token available')
-        return
-      }
-
-      console.log('📡 [GIG COMPLETION] Fetching gig completion details...')
-      let gigCompletions
+      let finalCommission = 0
       try {
-        gigCompletions = await dispatch(fetchAcceptedPurchaseGigs()).unwrap()
-        gigCompletions = Array.isArray(gigCompletions) ? gigCompletions : []
+        const gigCompletions = await dispatch(fetchAcceptedPurchaseGigs()).unwrap()
+        const list = Array.isArray(gigCompletions) ? gigCompletions : []
+        const matchingGig = list.find((g) => g.discountCode === gigInfo.discountCode)
+        if (matchingGig && productPriceInAED > 0) {
+          const commissionFixed =
+            matchingGig.influencerCommissionFixed ?? matchingGig.commissionFixed ?? 0
+          const commissionPercentage =
+            matchingGig.influencerCommissionPercentage ??
+            matchingGig.commissionPercentage ??
+            matchingGig.commission ??
+            0
+          if (commissionFixed > 0) {
+            finalCommission = commissionFixed
+          } else if (commissionPercentage > 0) {
+            finalCommission = Math.round((productPriceInAED * commissionPercentage) / 100 * 100) / 100
+          }
+        }
       } catch (err) {
-        console.error('❌ [GIG COMPLETION] Failed to fetch gig completions:', err)
-        return
-      }
-      
-      const matchingGig = gigCompletions.find(
-        (gig) => gig.discountCode === gigInfo.discountCode
-      )
-
-      if (!matchingGig) {
-        console.log('⚠️ [GIG COMPLETION] Gig completion not found for discount code:', gigInfo.discountCode)
-        sessionStorage.removeItem('pendingGigCompletionPurchase')
-        return
+        console.error('❌ [GIG COMPLETION] Failed to fetch gig details (sending commission 0):', err)
       }
 
-      // Get influencer commission - can be fixed amount or percentage
-      const commissionFixed = 
-        matchingGig.influencerCommissionFixed ||
-        matchingGig.commissionFixed ||
-        0
-
-      const commissionPercentage = 
-        matchingGig.influencerCommissionPercentage ||
-        matchingGig.commissionPercentage ||
-        matchingGig.commission ||
-        0
-
-      // Check if we have either fixed or percentage commission
-      if ((!commissionFixed || commissionFixed <= 0) && (!commissionPercentage || commissionPercentage <= 0)) {
-        console.log('⚠️ [GIG COMPLETION] No commission (fixed or percentage) found, skipping purchase notification')
-        sessionStorage.removeItem('pendingGigCompletionPurchase')
-        return
-      }
-
-      // Use product price directly for commission (assume prices are in AED as charged)
-      const productPriceInAED = totalProductPrice
-
-      // Calculate influencer commission in AED
-      // Priority: Fixed amount > Percentage
-      // Commission is calculated on product price only (no VAT, no shipping, no discounts)
-      let influencerCommission = 0
-      if (commissionFixed && commissionFixed > 0) {
-        // Use fixed commission amount directly (already in AED, no calculation needed)
-        influencerCommission = commissionFixed
-        console.log('💰 [GIG COMPLETION] Using fixed commission directly:', commissionFixed, 'AED')
-      } else if (commissionPercentage && commissionPercentage > 0) {
-        // Calculate commission as percentage of product price (before any taxes or fees)
-        influencerCommission = (productPriceInAED * commissionPercentage) / 100
-        // Round to 2 decimal places
-        influencerCommission = Math.round(influencerCommission * 100) / 100
-        console.log('💰 [GIG COMPLETION] Calculating percentage commission:', commissionPercentage + '% of', productPriceInAED.toFixed(2), 'AED (product price) =', influencerCommission.toFixed(2), 'AED')
-      }
-
-      console.log('🔄 [GIG COMPLETION] Calling purchase API:', {
-        orderId,
-        couponCode: gigInfo.discountCode,
-        totalProductPrice: totalProductPrice.toFixed(2),
-        productPriceInAED: productPriceInAED.toFixed(2),
-        orderSubtotal: order?.subtotal?.toFixed(2) || 'N/A',
-        commissionType: commissionFixed > 0 ? 'fixed' : 'percentage',
-        commissionFixed: commissionFixed > 0 ? commissionFixed : null,
-        commissionPercentage: commissionPercentage > 0 ? commissionPercentage : null,
-        influencerCommission: influencerCommission.toFixed(2)
-      })
-
-      // Round commission to 2 decimal places (for both fixed and percentage)
-      const finalCommission = Math.round(influencerCommission * 100) / 100
+      finalCommission = Number(finalCommission) >= 0 ? Math.round(finalCommission * 100) / 100 : 0
 
       try {
         await dispatch(notifyGigCompletionPurchase({
-          orderId,
+          orderId: orderIdStr,
           couponCode: gigInfo.discountCode,
           influencerCommission: finalCommission
         })).unwrap()
-        console.log('✅ [GIG COMPLETION] Purchase notification sent successfully')
+        sessionStorage.removeItem('pendingGigCompletionPurchase')
       } catch (err) {
         console.error('❌ [GIG COMPLETION] Failed to notify purchase:', err)
-        return
       }
-      
-      // Clear sessionStorage after successful notification
-      sessionStorage.removeItem('pendingGigCompletionPurchase')
-      console.log('🗑️ [GIG COMPLETION] Cleared sessionStorage')
     } catch (error) {
-      console.error('❌ [GIG COMPLETION] Exception occurred:', error)
-      // Don't fail the entire success page if gig completion notification fails
+      console.error('❌ [GIG COMPLETION] Exception:', error)
     }
   }
 
@@ -553,7 +474,7 @@ export default function CheckoutSuccessPage() {
               await fetchOrderAndRedeemQoyns(orderId || orderIdFromUrl || 'cash_wallet', 'cash_wallet')
               if (order) {
                 try {
-                  await notifyGigCompletionPurchase(order)
+                  await notifyGigCompletionPurchaseIfUsed(order)
                   if (typeof createDeliveryOrder === 'function') await createDeliveryOrder(order)
                 } catch (e) {
                   console.error('❌ Error on gig/delivery (cash wallet):', e)
@@ -595,8 +516,8 @@ export default function CheckoutSuccessPage() {
                                 []
               if (ordersList && ordersList.length > 0) {
                 const latestOrder = ordersList[0]
-                await notifyGigCompletionPurchase(latestOrder)
-                await createDeliveryOrder(latestOrder)
+                await notifyGigCompletionPurchaseIfUsed(latestOrder)
+                if (typeof createDeliveryOrder === 'function') await createDeliveryOrder(latestOrder)
               }
             } catch (error) {
               console.error('❌ Error fetching order for gig completion:', error)
@@ -624,8 +545,8 @@ export default function CheckoutSuccessPage() {
                                 []
               if (ordersList && ordersList.length > 0) {
                 const latestOrder = ordersList[0]
-                await notifyGigCompletionPurchase(latestOrder)
-                await createDeliveryOrder(latestOrder)
+                await notifyGigCompletionPurchaseIfUsed(latestOrder)
+                if (typeof createDeliveryOrder === 'function') await createDeliveryOrder(latestOrder)
               }
             } catch (err) {
               console.error('❌ Error fetching order for gig completion (error case):', err)
@@ -661,8 +582,8 @@ export default function CheckoutSuccessPage() {
                                 []
               if (ordersList && ordersList.length > 0) {
                 const latestOrder = ordersList[0]
-                await notifyGigCompletionPurchase(latestOrder)
-                await createDeliveryOrder(latestOrder)
+                await notifyGigCompletionPurchaseIfUsed(latestOrder)
+                if (typeof createDeliveryOrder === 'function') await createDeliveryOrder(latestOrder)
               }
             } catch (error) {
               console.error('❌ Error fetching order for gig completion:', error)
@@ -690,8 +611,8 @@ export default function CheckoutSuccessPage() {
                                 []
               if (ordersList && ordersList.length > 0) {
                 const latestOrder = ordersList[0]
-                await notifyGigCompletionPurchase(latestOrder)
-                await createDeliveryOrder(latestOrder)
+                await notifyGigCompletionPurchaseIfUsed(latestOrder)
+                if (typeof createDeliveryOrder === 'function') await createDeliveryOrder(latestOrder)
               }
             } catch (err) {
               console.error('❌ Error fetching order for gig completion (error case):', err)

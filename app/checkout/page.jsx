@@ -520,6 +520,15 @@ export default function CheckoutPage() {
     return null
   }
 
+  // Helper: fixed discount amount for this item (sales gig only; full fixed amount per product line when gig has customerDiscountFixed)
+  const getProductDiscountAmount = (item) => {
+    if (!hasGigCompletionDiscount(item) || !appliedGigCompletion) return 0
+    if (appliedGigCompletion.customerDiscountPercentage > 0) return 0 // percentage-based, use discountPercentage
+    if (!(appliedGigCompletion.customerDiscountFixed > 0)) return 0
+    // Apply full fixed discount per product (per cart line), not split across all
+    return appliedGigCompletion.customerDiscountFixed
+  }
+
   // Helper function to calculate discounted price for a product
   const getProductDiscountedPrice = (item) => {
     const originalPrice = item.price || 0
@@ -533,17 +542,10 @@ export default function CheckoutPage() {
         const discountPercentage = appliedGigCompletion.customerDiscountPercentage
         discountAmount = (originalPrice * discountPercentage) / 100
       } else if (appliedGigCompletion.customerDiscountFixed > 0) {
-        // For fixed discount, we need to calculate per unit
-        // Since fixed discount is on total, we'll calculate proportionally
-        const itemTotal = originalPrice * (item.quantity || 1)
-        const allMatchingItemsTotal = cartItems
-          .filter(i => hasGigCompletionDiscount(i))
-          .reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 1)), 0)
-        
-        if (allMatchingItemsTotal > 0) {
-          const itemDiscountShare = (itemTotal / allMatchingItemsTotal) * appliedGigCompletion.customerDiscountFixed
-          discountAmount = itemDiscountShare / (item.quantity || 1)
-        }
+        // Fixed discount is applied per product: full amount per cart line, so per-unit = fixed / quantity
+        const fixedPerLine = appliedGigCompletion.customerDiscountFixed
+        const qty = item.quantity || 1
+        discountAmount = fixedPerLine / qty
       }
     }
     
@@ -599,8 +601,8 @@ export default function CheckoutPage() {
             gigCompletionDiscountAmount += (itemTotal * appliedGigCompletion.customerDiscountPercentage) / 100
           })
         } else if (appliedGigCompletion.customerDiscountFixed > 0) {
-          // For fixed discount, apply the full amount (it's already a fixed value)
-          gigCompletionDiscountAmount = appliedGigCompletion.customerDiscountFixed
+          // Fixed discount: apply full amount per matching product (e.g. 18.36 off each product)
+          gigCompletionDiscountAmount = appliedGigCompletion.customerDiscountFixed * matchingItems.length
         }
       }
     }
@@ -623,25 +625,11 @@ export default function CheckoutPage() {
     }
   }
 
-  // VAT Calculation - use product VAT percentage or default to 5%
-  const getVatRate = () => {
-    if (cartItems.length === 0) return 0.05; // Default 5%
-    
-    // Get VAT percentage from the first item (assuming all items have same VAT rate)
-    const firstItem = cartItems[0];
-    const vatPercentage = firstItem.vat_percentage || 5; // Default to 5% if not provided
-    return vatPercentage / 100; // Convert percentage to decimal
-  }
-  
-  const vatRate = getVatRate();
-  // Calculate VAT on original subtotal (always, not on discounted amount)
-  const vatAmount = originalSubtotal * vatRate;
   // Get shipping cost from selected shipping method (from Jibly API)
   const shippingCost = selectedShippingMethod?.cost || selectedShippingMethod?.shippingMethodCost || 9; // Default to 9 if no method selected
-  
-  // Calculate order total before cash wallet
-  // VAT is always on original subtotal, but discounts are still applied to subtotal
-  const orderTotalBeforeCashWallet = subtotalAfterDiscounts + vatAmount + shippingCost;
+
+  // Calculate order total before cash wallet (no VAT)
+  const orderTotalBeforeCashWallet = subtotalAfterDiscounts + shippingCost;
   
   // Apply Cash Wallet discount on ORDER TOTAL (1 AED = 1 AED discount) - Only for influencer role
   let cashWalletDiscountAmount = 0
@@ -1565,7 +1553,6 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod,
       total: actualTotal,
       subtotal: subtotal,
-      vat: vatAmount,
       shipping: shippingCost,
       discount: qoynsDiscountAmount + couponDiscountAmount + gigCompletionDiscountAmount + cashWalletDiscountAmount,
       couponCode: appliedCoupon ? appliedCoupon.discountCode : (appliedGigCompletion ? appliedGigCompletion.discountCode : null),
@@ -1599,7 +1586,6 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod,
       total: actualTotal,
       subtotal: subtotal,
-      vat: vatAmount,
       shipping: shippingCost,
       discount: qoynsDiscountAmount + couponDiscountAmount + gigCompletionDiscountAmount + cashWalletDiscountAmount,
       couponCode: appliedCoupon ? appliedCoupon.discountCode : (appliedGigCompletion ? appliedGigCompletion.discountCode : null),
@@ -1704,17 +1690,26 @@ export default function CheckoutPage() {
 
       const body = {
         items: cartItems.map(item => {
-          return {
+          const base = {
             productId: item.productId || item.id,
             name: item.name || 'Product',
             quantity: item.quantity || 1,
             price: item.price || 0,
             image: item.image || undefined
           }
+          // Attach sales gig discount per item for order record (discount name and % or amount)
+          if (hasGigCompletionDiscount(item)) {
+            base.discountName = getProductDiscountCode(item) || undefined
+            base.discountPercentage = (appliedGigCompletion?.customerDiscountPercentage > 0)
+              ? appliedGigCompletion.customerDiscountPercentage
+              : undefined
+            const fixedAmt = getProductDiscountAmount(item)
+            base.discountAmount = fixedAmt > 0 ? fixedAmt : undefined
+          }
+          return base
         }),
         total: actualTotal,
         subtotal: subtotal,
-        vat: vatAmount,
         discount: qoynsDiscountAmount + couponDiscountAmount + gigCompletionDiscountAmount + cashWalletDiscountAmount,
         discountType: finalDiscountType,
         // Qoyns discount information
@@ -1733,6 +1728,12 @@ export default function CheckoutPage() {
         cognitoUserId: cognitoUserId, // Cognito user ID
         deliveryAddress: selectedAddress, // Include selected delivery address
         shippingAddress: shippingSameAsDelivery ? selectedAddress : null, // Include shipping address
+        // Shipping charge and method for payment API
+        shipping: shippingCost,
+        shippingMethod: selectedShippingMethod?.id || selectedShippingMethod?.methodId,
+        shippingMethodName: selectedShippingMethod?.name || selectedShippingMethod?.methodName,
+        shippingMethodTime: selectedShippingMethod?.deliveryTime || selectedShippingMethod?.estimatedDelivery || selectedShippingMethod?.time,
+        shippingMethodCost: shippingCost,
         successUrl: `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${window.location.origin}/checkout`,
         ...(mongoUserId && { mongoUserId }) // Include MongoDB userId if available
@@ -1821,19 +1822,29 @@ export default function CheckoutPage() {
         return
       }
 
-      // Build checkout payload for cash-wallet API (backendcart.qliq.ae/api/payment/cash-wallet/checkout)
+      // Build checkout payload for cash-wallet API (include per-item sales gig discount for order record)
       const checkoutPayload = {
-        items: cartItems.map(item => ({
-          productId: (item.productId || item.id)?.toString?.() || item.productId || item.id,
-          name: item.name || 'Product',
-          price: Number(item.price) || 0,
-          quantity: Number(item.quantity) || 1,
-          image: item.image || null
-        })),
+        items: cartItems.map(item => {
+          const base = {
+            productId: (item.productId || item.id)?.toString?.() || item.productId || item.id,
+            name: item.name || 'Product',
+            price: Number(item.price) || 0,
+            quantity: Number(item.quantity) || 1,
+            image: item.image || null
+          }
+          if (hasGigCompletionDiscount(item)) {
+            base.discountName = getProductDiscountCode(item) || undefined
+            base.discountPercentage = (appliedGigCompletion?.customerDiscountPercentage > 0)
+              ? appliedGigCompletion.customerDiscountPercentage
+              : undefined
+            const fixedAmt = getProductDiscountAmount(item)
+            base.discountAmount = fixedAmt > 0 ? fixedAmt : undefined
+          }
+          return base
+        }),
         currency: 'usd',
         total: Number(actualTotal),
         subtotal: Number(originalSubtotal),
-        vat: Number(vatAmount),
         discount: qoynsDiscountAmount + couponDiscountAmount + cashWalletDiscountAmount,
         cashWalletAmount: cashWalletDiscountAmount,
         qoynsDiscountAmount: qoynsDiscountAmount,
@@ -1849,6 +1860,7 @@ export default function CheckoutPage() {
           phone: selectedAddress.phone,
           email: selectedAddress.email
         },
+        shipping: Number(shippingCost),
         shippingMethod: (selectedShippingMethod?.id || selectedShippingMethod?.methodId || 'standard').toString(),
         shippingMethodName: selectedShippingMethod?.name || selectedShippingMethod?.methodName || 'Standard Delivery',
         shippingMethodCost: Number(shippingCost)
@@ -2171,7 +2183,7 @@ export default function CheckoutPage() {
                   const daysRemaining = calculateDaysRemaining(qoynExpiryDate)
                   
                   if (daysRemaining !== null) {
-                    return `${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'} remaining`
+                    return `Expires in ${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'}`
                   } else {
                     return 'No expiry is available'
                   }
@@ -2305,7 +2317,7 @@ export default function CheckoutPage() {
 
               {/* Address Form */}
               {showAddressForm && (
-                <form className={styles.addressForm} onSubmit={handleAddressSubmit}>
+                <form className={styles.addressForm} onSubmit={handleAddressSubmit} noValidate>
                   {error && (
                     <div className={styles.errorMessage}>
                       {error}
@@ -2550,7 +2562,7 @@ export default function CheckoutPage() {
                 </div>
               )}
               {!shippingSameAsDelivery && showShippingForm && (
-                <form className={styles.addressForm} onSubmit={handleAddressSubmit}>
+                <form className={styles.addressForm} onSubmit={handleAddressSubmit} noValidate>
                   <div className={styles.addressFormTabs}>
                     <button
                       type="button"
@@ -3117,10 +3129,6 @@ export default function CheckoutPage() {
                     </>
                   )}
                   {/* Gig Completion offer display removed per request (still applied to subtotal calculation) */}
-                  <div className={styles.totalRow}>
-                    <span>VAT ({(vatRate * 100).toFixed(0)}%)</span>
-                    <span>AED {vatAmount.toFixed(2)}</span>
-                  </div>
                   <div className={styles.totalRow}>
                     <span>Shipping</span>
                     <span>AED {shippingCost.toFixed(2)}</span>

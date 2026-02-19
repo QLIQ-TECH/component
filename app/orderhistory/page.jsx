@@ -790,40 +790,69 @@ const OrderHistoryPage = () => {
       .join(' ');
   };
 
-  // Calculate discounted price and discount amount for an item when discountType is gig_completion
+  // Calculate discounted price and discount amount for an item.
+  // Prefer product-level discount (discountName, discountAmount or discountPercentage), then order-level gig_completion.
   const getItemPriceDetails = (item, order) => {
     const basePrice = Number(item?.unitPrice ?? item?.price ?? 0) || 0;
-    
-    // If discountType is gig_completion, calculate discounted price
+    const qty = Math.max(1, Number(item?.quantity) || 1);
+
+    // 1) Product-level discount: item has discountName and either discountAmount or discountPercentage
+    const hasItemDiscount = item?.discountName && (Number(item?.discountAmount) > 0 || Number(item?.discountPercentage) > 0);
+    if (hasItemDiscount) {
+      let discountPerUnit = 0;
+      let discountPercentage = 0;
+
+      if (Number(item.discountPercentage) > 0) {
+        discountPercentage = Number(item.discountPercentage);
+        discountPerUnit = (basePrice * discountPercentage) / 100;
+      } else if (Number(item.discountAmount) > 0) {
+        discountPerUnit = Number(item.discountAmount);
+        discountPercentage = basePrice > 0 ? (discountPerUnit / basePrice) * 100 : 0;
+      }
+
+      const discountedPrice = Math.max(0, basePrice - discountPerUnit);
+
+      return {
+        originalPrice: basePrice,
+        discountAmount: Number(discountPerUnit.toFixed(2)),
+        discountedPrice: Number(discountedPrice.toFixed(2)),
+        discountPercentage: Number(discountPercentage.toFixed(2)),
+        discountType: null,
+        discountName: item.discountName
+      };
+    }
+
+    // 2) Order-level: discountType is gig_completion
     if (order?.discountType === 'gig_completion' && order?.discount > 0) {
       const totalDiscount = Number(order.discount) || 0;
       const orderSubtotal = getItemsSubtotal(order);
-      
+
       if (orderSubtotal > 0) {
-        // Calculate discount proportion for this item
-        const itemTotal = basePrice * (Number(item?.quantity) || 1);
+        const itemTotal = basePrice * qty;
         const discountProportion = itemTotal / orderSubtotal;
         const itemDiscount = totalDiscount * discountProportion;
-        const discountPerUnit = itemDiscount / (Number(item?.quantity) || 1);
+        const discountPerUnit = itemDiscount / qty;
         const discountedPrice = basePrice - discountPerUnit;
-        const discountPercentage = basePrice > 0 ? ((discountPerUnit / basePrice) * 100) : 0;
-        
+        const pct = basePrice > 0 ? (discountPerUnit / basePrice) * 100 : 0;
+
         return {
           originalPrice: basePrice,
           discountAmount: Number(discountPerUnit.toFixed(2)),
           discountedPrice: Math.max(0, Number(discountedPrice.toFixed(2))),
-          discountPercentage: Number(discountPercentage.toFixed(2)),
-          discountType: order.discountType
+          discountPercentage: Number(pct.toFixed(2)),
+          discountType: order.discountType,
+          discountName: null
         };
       }
     }
-    
+
     return {
       originalPrice: basePrice,
       discountAmount: 0,
       discountedPrice: basePrice,
       discountPercentage: 0,
-      discountType: null
+      discountType: null,
+      discountName: null
     };
   };
 
@@ -1348,7 +1377,12 @@ const OrderHistoryPage = () => {
                         {(() => {
                           const priceDetails = getItemPriceDetails(item, orderData);
                           const hasDiscount = priceDetails.discountAmount > 0;
-                          
+                          const discountLabel = priceDetails.discountName
+                            ? `${priceDetails.discountName} (${priceDetails.discountPercentage}% OFF)`
+                            : priceDetails.discountType
+                              ? `${formatDiscountType(priceDetails.discountType)} (${priceDetails.discountPercentage}% OFF)`
+                              : `${priceDetails.discountPercentage}% OFF`;
+
                           return (
                             <div className={styles.productPriceContainer}>
                               {hasDiscount ? (
@@ -1357,7 +1391,7 @@ const OrderHistoryPage = () => {
                                     AED {priceDetails.originalPrice.toFixed(2)}
                                   </p>
                                   <p className={styles.discountType}>
-                                    {formatDiscountType(priceDetails.discountType)} ({priceDetails.discountPercentage}% OFF)
+                                    {discountLabel}
                                   </p>
                                   <p className={styles.discountAmount}>
                                     - AED {priceDetails.discountAmount.toFixed(2)}
@@ -1387,6 +1421,36 @@ const OrderHistoryPage = () => {
                   <span className={styles.costValue}>AED {getDiscountedItemsSubtotal(orderData).toFixed(2)}</span>
                 </div>
 
+                {/* Qoyns Discount - below subtotal */}
+                {(Number(orderData.qoynsDiscountAmount) || 0) > 0 && (
+                  <div className={styles.costItem}>
+                    <span className={styles.costLabel}>Qoyns Discount</span>
+                    <span className={styles.discountValue || styles.costValue}>
+                      - AED {(Number(orderData.qoynsDiscountAmount) || 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Cash Wallet - below subtotal */}
+                {(Number(orderData.cashWalletAmount) || 0) > 0 && (
+                  <div className={styles.costItem}>
+                    <span className={styles.costLabel}>Cash Wallet</span>
+                    <span className={styles.discountValue || styles.costValue}>
+                      - AED {(Number(orderData.cashWalletAmount) || 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Subtotal after discount */}
+                {((Number(orderData.qoynsDiscountAmount) || 0) > 0 || (Number(orderData.cashWalletAmount) || 0) > 0) && (
+                  <div className={styles.costItem}>
+                    <span className={styles.costLabel}>Subtotal after discount</span>
+                    <span className={styles.costValue}>
+                      AED {(getDiscountedItemsSubtotal(orderData) - (Number(orderData.qoynsDiscountAmount) || 0) - (Number(orderData.cashWalletAmount) || 0)).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
                 {/* Shipping */}
                 <div className={styles.costItem}>
                   <span className={styles.costLabel}>Shipping</span>
@@ -1395,44 +1459,12 @@ const OrderHistoryPage = () => {
                   </span>
                 </div>
 
-                {/* VAT - Use order data VAT */}
-                <div className={styles.costItem}>
-                  <span className={styles.costLabel}>VAT</span>
-                  <span className={styles.costValue}>
-                    AED {(Number(orderData.vat) || 0).toFixed(2)}
-                  </span>
-                </div>
-
-                {/* Discount - Only for qoyns and cash wallet, NOT for gig_completion */}
-                {(() => {
-                  const qoynsDiscount = orderData.qoynsDiscountAmount || 0;
-                  const cashWalletDiscount = orderData.cashWalletAmount || 0;
-                  const otherDiscount = (orderData.discountType && orderData.discountType !== 'gig_completion' && orderData.discount > 0) ? (orderData.discount || 0) : 0;
-                  const totalDiscount = qoynsDiscount + cashWalletDiscount + otherDiscount;
-                  const discountType = orderData.discountType;
-                  const discount = orderData.discount;
-                  
-                  if (totalDiscount > 0) {
-                    return (
-                      <div className={styles.costItem}>
-                        <span className={styles.costLabel}> Discount</span>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                          <span className={styles.discountValue}>
-                            - AED {discount.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
                 {/* Order Total */}
                 <div className={`${styles.costItem} ${styles.totalItem}`}>
                   <span className={styles.costLabel}>Order Total</span>
                   <span className={styles.totalValue}>
                     AED {(Number(orderData.totalAmount) || (
                       getDiscountedItemsSubtotal(orderData) +
-                      (Number(orderData.vat) || 0) +
                       ((orderData.shippingCost === 0 || !orderData.shippingCost) ? 9.00 : Number(orderData.shippingCost)) -
                       (orderData.qoynsDiscountAmount || 0) -
                       (orderData.cashWalletAmount || 0)

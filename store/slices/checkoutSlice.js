@@ -472,7 +472,12 @@ export const createStripeHostedCheckoutSession = createAsyncThunk(
       })
       if (!res.ok) {
         const text = await res.text()
-        throw new Error(text || `Checkout failed: ${res.status}`)
+        let errMsg = text || `Checkout failed: ${res.status}`
+        try {
+          const errJson = JSON.parse(text)
+          errMsg = errJson.message || errJson.error || errMsg
+        } catch (_) {}
+        throw new Error(errMsg)
       }
       const json = await res.json()
       return json.data
@@ -661,7 +666,8 @@ export const confirmStripePaymentIntent = createAsyncThunk(
   }
 )
 
-// Notify gig completion purchase (success page)
+// Notify gig completion purchase (POST /api/gig-completions/purchase)
+// Body: { orderId, couponCode, influencerCommission (AED) }
 export const notifyGigCompletionPurchase = createAsyncThunk(
   'checkout/notifyGigCompletionPurchase',
   async (payload, { rejectWithValue }) => {
@@ -671,23 +677,33 @@ export const notifyGigCompletionPurchase = createAsyncThunk(
         throw new Error('Authentication required')
       }
       const { orderId, couponCode, influencerCommission } = payload
+      const body = {
+        orderId: orderId != null ? String(orderId) : undefined,
+        couponCode: couponCode != null ? String(couponCode) : undefined,
+        influencerCommission: typeof influencerCommission === 'number' ? Number(influencerCommission) : Number(influencerCommission) || 0
+      }
       const response = await fetch(gigs.purchase, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          orderId,
-          couponCode,
-          influencerCommission
-        })
+        body: JSON.stringify(body)
       })
       if (!response.ok) {
         const errorText = await response.text()
-        throw new Error(errorText || 'Failed to notify gig completion purchase')
+        let errMsg = errorText || `Failed to notify gig completion purchase (${response.status})`
+        try {
+          const errJson = JSON.parse(errorText)
+          errMsg = errJson.message || errJson.error || errMsg
+        } catch (_) {}
+        throw new Error(errMsg)
       }
-      return await response.json()
+      const contentType = response.headers.get('content-type')
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json()
+      }
+      return { success: true }
     } catch (error) {
       return rejectWithValue(error.message)
     }

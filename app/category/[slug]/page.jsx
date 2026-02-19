@@ -502,7 +502,7 @@ export default function CategoryPage() {
               className="banner-content"
               style={{
                 backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0.00) 0%, rgba(0, 0, 0, 0.60) 100%), url('${storeBannerImage}')`,
-                backgroundSize: 'contain',
+                backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 backgroundRepeat: 'no-repeat'
               }}

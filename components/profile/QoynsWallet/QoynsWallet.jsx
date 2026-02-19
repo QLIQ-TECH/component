@@ -58,7 +58,7 @@ export default function QoynsWallet() {
         <div className={styles.CardDetails}>
           {daysRemaining !== null ? (
             <span className={styles.QoynsExiry}>
-              {daysRemaining} {daysRemaining === 1 ? 'Day' : 'Days'} remaining
+              Expires in {daysRemaining} {daysRemaining === 1 ? 'Day' : 'Days'}
             </span>
           ) : (
             <span className={styles.QoynsExiry}>No expiry is available</span>
