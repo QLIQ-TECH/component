@@ -193,6 +193,9 @@ export default function CheckoutSuccessPage() {
       }
 
       const orderItems = order?.items || []
+      const orderCurrency = order?.currency || 'aed'
+      
+      // Calculate total product price from items (price × quantity for each item)
       const totalProductPrice = orderItems.reduce((sum, item) => {
         const itemPrice = item.price || 0
         const itemQuantity = item.quantity || 1
