@@ -1,7 +1,7 @@
 /* Page Layout */
 .page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #fff;
   display: flex;
   flex-direction: column;
 }
@@ -18,7 +18,7 @@
 /* Loading Styles */
 .loadingContainer {
   text-align: center;
-  background: white;
+  background: #0082FF;
   padding: 3rem 2rem;
   border-radius: 20px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
