@@ -14,7 +14,7 @@ import { buildFacetsFromProducts } from '@/utils/facets'
 import { buildFacetsFromSearchFilters } from '@/utils/searchFilters'
 import { search } from '@/store/api/endpoints'
 
-// Helper function to transform API product data to match ProductCard component format
+// Helper function to transform API product data to match ProductCard component format (VAT-inclusive prices)
 const transformProductData = (apiProduct) => {
   // Get the primary image or first available image
   const primaryImage = apiProduct.images?.find(img => img.is_primary) || apiProduct.images?.[0];
@@ -22,19 +22,23 @@ const transformProductData = (apiProduct) => {
   // Use placeholder image if no valid image URL
   const imageUrl = primaryImage?.url || 'https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644';
 
-  // Calculate savings for offer badge
-  const savings = apiProduct.is_offer && apiProduct.price && apiProduct.discount_price
-    ? apiProduct.price - apiProduct.discount_price
+  const priceWithVat = apiProduct.price_with_vat ?? apiProduct.price
+  const discountPriceWithVat = apiProduct.discount_price_with_vat ?? apiProduct.discount_price
+  const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
+  const savings = apiProduct.is_offer && priceWithVat != null && discountPriceWithVat != null && discountPriceWithVat > 0
+    ? priceWithVat - discountPriceWithVat
     : 0;
 
   return {
     id: apiProduct._id || apiProduct.slug,
     title: apiProduct.title || 'Product Title',
-    price: `AED ${(apiProduct.discount_price !== undefined && apiProduct.discount_price !== null) ? apiProduct.discount_price : (apiProduct.price || '0')}`,
+    price: `AED ${effectivePrice ?? '0'}`,
     rating: apiProduct.average_rating?.toString() || '0',
     deliveryTime: '30 Min', // Default delivery time since it's not in API
     image: imageUrl,
-    badge: apiProduct.is_offer && savings > 0 ? `Save AED ${savings}` : null
+    badge: apiProduct.is_offer && savings > 0 ? `Save AED ${savings}` : null,
+    priceWithVat: priceWithVat != null ? Number(priceWithVat) : undefined,
+    discountPriceWithVat: discountPriceWithVat != null && Number(discountPriceWithVat) > 0 ? Number(discountPriceWithVat) : undefined
   }
 }
 
@@ -98,19 +102,21 @@ export default function SearchPage() {
     return 1
   }, [searchPagination, pageSize])
 
-  // Use searchResults; when sorting by price, sort by discount price (effective price) on the frontend
+  // Use searchResults; when sorting by price, sort by discounted price with VAT (effective price) on the frontend
   const displayResults = useMemo(() => {
     if (!Array.isArray(searchResults)) {
       return []
     }
-    const getEffectivePrice = (p) => {
-      const discount = p.discount_price != null && Number(p.discount_price) > 0 ? Number(p.discount_price) : null
-      return discount !== null ? discount : (Number(p.price) || 0)
+    const getEffectivePriceWithVat = (p) => {
+      const discountWithVat = p.discount_price_with_vat != null && Number(p.discount_price_with_vat) > 0 ? Number(p.discount_price_with_vat) : null
+      if (discountWithVat !== null) return discountWithVat
+      const priceWithVat = p.price_with_vat != null ? Number(p.price_with_vat) : null
+      return priceWithVat !== null ? priceWithVat : (Number(p.price) || 0)
     }
     if (sortBy === 'price_asc' || sortBy === 'price_desc') {
       return [...searchResults].sort((a, b) => {
-        const pa = getEffectivePrice(a)
-        const pb = getEffectivePrice(b)
+        const pa = getEffectivePriceWithVat(a)
+        const pb = getEffectivePriceWithVat(b)
         return sortBy === 'price_asc' ? pa - pb : pb - pa
       })
     }
@@ -439,19 +445,25 @@ export default function SearchPage() {
                   ) : searchError ? (
                     <div style={{ gridColumn: '1 / -1', color: 'red' }}>Failed to load search results: {searchError}</div>
                   ) : displayResults.length > 0 ? (
-                    displayResults.map((product, index) => (
+                    displayResults.map((product, index) => {
+                      const priceWithVat = product.price_with_vat ?? product.price
+                      const discountPriceWithVat = product.discount_price_with_vat ?? product.discount_price
+                      const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
+                      return (
                       <div key={product._id || product.id || `p-${index}`} className="grid-item">
                         <ProductCard 
                           id={product._id || product.id}
                           slug={product.slug || product._id || product.id}
                           title={product.title || product.name || 'Product'}
-                          price={(product.discount_price !== undefined && product.discount_price !== null) ? `AED ${product.discount_price}` : (product.price ? `AED ${product.price}` : 'AED 0')}
+                          price={effectivePrice != null ? `AED ${effectivePrice}` : 'AED 0'}
                           rating={product.average_rating || product.rating || '4.0'}
                           deliveryTime={product.deliveryTime || '30 Min'}
                           image={product.images?.[0]?.url || product.image || '/iphone.jpg'}
+                          priceWithVat={priceWithVat != null ? Number(priceWithVat) : undefined}
+                          discountPriceWithVat={discountPriceWithVat != null && Number(discountPriceWithVat) > 0 ? Number(discountPriceWithVat) : undefined}
                         />
                       </div>
-                    ))
+                    )})
                   ) : (
                     <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px 0', color: '#6b7280' }}>
                       No products found for this search.

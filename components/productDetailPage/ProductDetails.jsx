@@ -117,6 +117,8 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
       ; (async () => {
         const userId = await getUserFromCookies()
 
+        const priceWithVat = product.originalPrice ?? product.price
+        const discountPriceWithVat = (product.originalPrice != null && product.price != null && product.price < product.originalPrice) ? product.price : product.price
         const cartItem = {
           userId,
           productId: product.id,
@@ -125,7 +127,9 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           quantity: quantity,
           image: product.images[0],
           selectedColor,
-          selectedSize
+          selectedSize,
+          price_with_vat: priceWithVat,
+          discount_price_with_vat: discountPriceWithVat
         }
 
         const result = await dispatch(addToCart(cartItem))

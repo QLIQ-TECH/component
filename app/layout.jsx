@@ -23,6 +23,11 @@ export const metadata = {
     apple: '/favicon.png',
     shortcut: '/favicon.png',
   },
+  ...(process.env.GOOGLE_SITE_VERIFICATION && {
+    verification: {
+      google: process.env.GOOGLE_SITE_VERIFICATION,
+    },
+  }),
 }
 
 export default function RootLayout({
@@ -34,6 +39,34 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.png" type="image/png" />
         <link rel="shortcut icon" href="/favicon.png" type="image/png" />
         <link rel="apple-touch-icon" href="/favicon.png" />
+        {/* Google tag (gtag.js) - GA4 */}
+        <script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=G-2505FNDQFZ"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'G-2505FNDQFZ');
+            `,
+          }}
+        />
+        {/* Microsoft Clarity */}
+        <script
+          type="text/javascript"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(c,l,a,r,i,t,y){
+                c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+              })(window, document, "clarity", "script", "vitdhhur1w");
+            `,
+          }}
+        />
       </head>
       <body>
         <ReduxProvider>

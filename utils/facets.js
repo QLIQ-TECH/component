@@ -2,10 +2,15 @@
 // Produces sections for: Availability, Price range, Rating, Brand, Store, Categories, Attributes, Specifications, Tags, Offers
 
 function getNumericPrice(product) {
-  const effective = typeof product.discount_price === 'number' && product.discount_price > 0
-    ? product.discount_price
-    : product.price
-  return typeof effective === 'number' ? effective : 0
+  // Use discounted price with VAT when available, else price with VAT, else price (for facets/range)
+  const discountWithVat = product.discount_price_with_vat != null && Number(product.discount_price_with_vat) > 0
+    ? Number(product.discount_price_with_vat)
+    : null
+  if (discountWithVat !== null) return discountWithVat
+  const priceWithVat = product.price_with_vat != null ? Number(product.price_with_vat) : null
+  if (priceWithVat !== null) return priceWithVat
+  const fallback = typeof product.price === 'number' ? product.price : 0
+  return typeof fallback === 'number' ? fallback : 0
 }
 
 export function buildFacetsFromProducts(products = []) {

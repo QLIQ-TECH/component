@@ -100,16 +100,19 @@ export default function ProductPage({ params }) {
     }
   }
 
-  // Map the fetched product data to the format expected by ProductDetails
+  // Map the fetched product data to the format expected by ProductDetails (VAT-inclusive prices)
+  const priceWithVat = product?.price_with_vat ?? product?.price
+  const discountPriceWithVat = product?.discount_price_with_vat ?? product?.discount_price
+  const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
   const mappedProduct = product ? {
     id: product._id,
     slug: product.slug || params.id,
     name: product.title,
     brand: product.brand_id?.name || 'Brand',
-    price: product.discount_price || product.price,
-    originalPrice: product.price,
-    discount: product.discount_price && product.price ? 
-      Math.round(((product.price - product.discount_price) / product.price) * 100) : 0,
+    price: effectivePrice ?? 0,
+    originalPrice: priceWithVat ?? 0,
+    discount: priceWithVat != null && discountPriceWithVat != null && discountPriceWithVat > 0
+      ? Math.round(((priceWithVat - discountPriceWithVat) / priceWithVat) * 100) : 0,
     rating: product.average_rating || 5,
     stock: product.stock_quantity > 0 ? "In Stock" : "Out of Stock",
     deliveryTime: "Available in 30 Minutes",
@@ -127,21 +130,22 @@ export default function ProductPage({ params }) {
     selectedSize: selectedAttributes.storage || product.variant_attributes?.storage
   } : mockProduct
 
-  // Map API products to the format expected by ProductSections
+  // Map API products to the format expected by ProductSections (VAT-inclusive prices)
   const relatedProducts = products && products.length > 0 
-    ? products.map(product => {
-        // Get the primary image or first available image
-        const primaryImage = product.images?.find(img => img.is_primary) || product.images?.[0];
-        const imageUrl = primaryImage?.url || product.image || product.images?.[0]?.url || 'https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644';
-        
+    ? products.map(p => {
+        const primaryImage = p.images?.find(img => img.is_primary) || p.images?.[0];
+        const imageUrl = primaryImage?.url || p.image || p.images?.[0]?.url || 'https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644';
+        const pWithVat = p.price_with_vat ?? p.price
+        const dWithVat = p.discount_price_with_vat ?? p.discount_price
+        const eff = (dWithVat != null && dWithVat > 0) ? dWithVat : pWithVat
         return {
-          id: product._id || product.id,
-          slug: product.slug || product._id || product.id,
-          title: product.title || product.name || 'Product',
-          price: product.discount_price || product.price ? `AED ${product.discount_price || product.price}` : 'AED 0',
-          originalPrice: product.price ? `AED ${product.price}` : null,
-          rating: product.average_rating || product.rating || '4.0',
-          deliveryTime: product.deliveryTime || '30 Min',
+          id: p._id || p.id,
+          slug: p.slug || p._id || p.id,
+          title: p.title || p.name || 'Product',
+          price: eff != null ? `AED ${eff}` : 'AED 0',
+          originalPrice: pWithVat != null ? `AED ${pWithVat}` : null,
+          rating: p.average_rating || p.rating || '4.0',
+          deliveryTime: p.deliveryTime || '30 Min',
           image: imageUrl
         };
       })
