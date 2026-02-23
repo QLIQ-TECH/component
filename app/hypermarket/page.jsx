@@ -37,23 +37,26 @@ const transformProductData = (apiProduct) => {
   // Use placeholder image if no valid image URL
   const imageUrl = primaryImage?.url || 'https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644';
 
-  // Calculate savings for offer badge
-  const savings = apiProduct.is_offer && apiProduct.price && apiProduct.discount_price
-    ? apiProduct.price - apiProduct.discount_price
+  const priceWithVat = apiProduct.price_with_vat ?? apiProduct.price
+  const discountPriceWithVat = apiProduct.discount_price_with_vat ?? apiProduct.discount_price
+  const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
+  const savings = apiProduct.is_offer && priceWithVat != null && discountPriceWithVat != null && discountPriceWithVat > 0
+    ? priceWithVat - discountPriceWithVat
     : 0;
 
-  // Format savings to 2 decimal places
   const formattedSavings = savings > 0 ? savings.toFixed(2) : 0;
 
   return {
     id: apiProduct._id || apiProduct.slug,
     slug: apiProduct.slug,
     title: apiProduct.title || 'Product Title',
-    price: `AED ${apiProduct.discount_price || apiProduct.price || '0'}`,
+    price: `AED ${effectivePrice ?? '0'}`,
     rating: apiProduct.average_rating?.toString() || '0',
     deliveryTime: '30 Min', // Default delivery time since it's not in API
     image: imageUrl,
-    badge: apiProduct.is_offer && savings > 0 ? `Save AED ${formattedSavings}` : null
+    badge: apiProduct.is_offer && savings > 0 ? `Save AED ${formattedSavings}` : null,
+    priceWithVat: priceWithVat != null ? Number(priceWithVat) : undefined,
+    discountPriceWithVat: discountPriceWithVat != null && Number(discountPriceWithVat) > 0 ? Number(discountPriceWithVat) : undefined
   }
 }
 

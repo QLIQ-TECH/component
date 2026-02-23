@@ -715,6 +715,20 @@ export default function CheckoutPage() {
     }
   }, [subtotalAfterGigCompletion, cartItems.length, dispatch])
 
+  // When validation says Qoyns are no longer eligible (e.g. order below 100 after applying sales gig),
+  // remove applied Qoyns so the UI and totals stay correct.
+  useEffect(() => {
+    if (appliedDiscount?.type !== 'qoyn') return
+    const noLongerEligible = !qoynValidation.eligibleForDiscount || (qoynValidation.currentDiscountQoyn != null && qoynValidation.currentDiscountQoyn <= 0)
+    if (noLongerEligible && !qoynValidation.isValidationLoading) {
+      setAppliedDiscount(null)
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('pendingQoynRedemption')
+      }
+      showToast('Qoyns removed — order total is below the minimum (e.g. 100 AED) after applying the discount.', 'info')
+    }
+  }, [qoynValidation.eligibleForDiscount, qoynValidation.currentDiscountQoyn, qoynValidation.isValidationLoading, appliedDiscount?.type])
+
   // Reset country/state/city selections and autocomplete when address form is closed
   useEffect(() => {
     if (!showAddressForm && !showShippingForm) {
