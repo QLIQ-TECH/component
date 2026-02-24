@@ -13,9 +13,11 @@ export const addToCart = createAsyncThunk(
       
       const payload = {
         ...cartItem,
-        ...(mongoUserId && { mongoUserId }) // Include MongoDB userId if available
+        discount_price_with_vat: cartItem.discount_price_with_vat ?? cartItem.price,
+        ...(mongoUserId && { mongoUserId })
       }
-      
+      delete payload.discount_price
+
       const response = await fetch(cart.add, {
         method: 'POST',
         headers: {

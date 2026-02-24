@@ -612,32 +612,26 @@ export default function CheckoutPage() {
     subtotalAfterGigCompletion = subtotalAfterCoupon
   }
 
-  // Apply Qoyns discount to subtotal (after coupon and gig completion discount)
+  // Qoyns discount amount (applied on order total = subtotal + delivery)
   let qoynsDiscountAmount = 0
-  let subtotalAfterDiscounts = subtotalAfterGigCompletion
   if (appliedDiscount && appliedDiscount.discountAmount) {
     qoynsDiscountAmount = appliedDiscount.discountAmount
-    // Apply Qoyns discount to subtotal after gig completion discount
-    subtotalAfterDiscounts = subtotalAfterGigCompletion - qoynsDiscountAmount
-    // Ensure subtotal doesn't go negative
-    if (subtotalAfterDiscounts < 0) {
-      subtotalAfterDiscounts = 0
-    }
   }
 
   // Get shipping cost from selected shipping method (from Jibly API)
   const shippingCost = selectedShippingMethod?.cost || selectedShippingMethod?.shippingMethodCost || 9; // Default to 9 if no method selected
 
-  // Calculate order total before cash wallet (no VAT)
-  const orderTotalBeforeCashWallet = subtotalAfterDiscounts + shippingCost;
+  // Order Total = Subtotal + Delivery (before Qoyns)
+  const orderTotalBeforeQoyns = subtotalAfterGigCompletion + shippingCost;
+  // Apply Qoyns discount on order total (subtotal + delivery)
+  const orderTotalAfterQoyns = Math.max(0, orderTotalBeforeQoyns - qoynsDiscountAmount);
   
-  // Apply Cash Wallet discount on ORDER TOTAL (1 AED = 1 AED discount) - Only for influencer role
+  // Apply Cash Wallet discount on ORDER TOTAL after Qoyns (1 AED = 1 AED discount) - Only for influencer role
   let cashWalletDiscountAmount = 0
-  let finalTotal = orderTotalBeforeCashWallet
+  let finalTotal = orderTotalAfterQoyns
   if (userRole === 'influencer' && useCashWallet && redeemableCashAed > 0) {
-    // Use the minimum of cash balance or order total
-    cashWalletDiscountAmount = Math.min(redeemableCashAed, orderTotalBeforeCashWallet)
-    finalTotal = orderTotalBeforeCashWallet - cashWalletDiscountAmount
+    cashWalletDiscountAmount = Math.min(redeemableCashAed, orderTotalAfterQoyns)
+    finalTotal = orderTotalAfterQoyns - cashWalletDiscountAmount
     if (finalTotal < 0) {
       finalTotal = 0
     }
@@ -646,8 +640,8 @@ export default function CheckoutPage() {
   // Use the calculated final total
   const actualTotal = finalTotal;
   
-  // For display purposes
-  const subtotal = subtotalAfterDiscounts;
+  // For display and API purposes (subtotal sent to backend = products total after coupon/gig, before qoyns)
+  const subtotal = subtotalAfterGigCompletion;
   // Combined discounts (coupon + gig completion + qoyns) — shown inline in Subtotal
   const totalDiscounts = couponDiscountAmount + gigCompletionDiscountAmount + qoynsDiscountAmount;
 
@@ -720,6 +714,20 @@ export default function CheckoutPage() {
       }))
     }
   }, [subtotalAfterGigCompletion, cartItems.length, dispatch])
+
+  // When validation says Qoyns are no longer eligible (e.g. order below 100 after applying sales gig),
+  // remove applied Qoyns so the UI and totals stay correct.
+  useEffect(() => {
+    if (appliedDiscount?.type !== 'qoyn') return
+    const noLongerEligible = !qoynValidation.eligibleForDiscount || (qoynValidation.currentDiscountQoyn != null && qoynValidation.currentDiscountQoyn <= 0)
+    if (noLongerEligible && !qoynValidation.isValidationLoading) {
+      setAppliedDiscount(null)
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('pendingQoynRedemption')
+      }
+      showToast('Qoyns removed — order total is below the minimum (e.g. 100 AED) after applying the discount.', 'info')
+    }
+  }, [qoynValidation.eligibleForDiscount, qoynValidation.currentDiscountQoyn, qoynValidation.isValidationLoading, appliedDiscount?.type])
 
   // Reset country/state/city selections and autocomplete when address form is closed
   useEffect(() => {
@@ -3116,18 +3124,6 @@ export default function CheckoutPage() {
                       <span>- AED {couponDiscountAmount.toFixed(2)}</span>
                     </div>
                   )}
-                  {appliedDiscount && qoynsDiscountAmount > 0 && (
-                    <>
-                      <div className={styles.totalRowDiscount}>
-                        <span>Qoyns Discount</span>
-                        <span>- AED {qoynsDiscountAmount.toFixed(2)}</span>
-                      </div>
-                      <div className={styles.totalRow}>
-                        <span>Subtotal (after discount)</span>
-                        <span>AED {subtotal.toFixed(2)}</span>
-                      </div>
-                    </>
-                  )}
                   {/* Gig Completion offer display removed per request (still applied to subtotal calculation) */}
                   <div className={styles.totalRow}>
                     <span>Shipping</span>
@@ -3135,8 +3131,14 @@ export default function CheckoutPage() {
                   </div>
                   <div className={styles.totalRow}>
                     <span>Order Total</span>
-                    <span>AED {orderTotalBeforeCashWallet.toFixed(2)}</span>
+                    <span>AED {orderTotalBeforeQoyns.toFixed(2)}</span>
                   </div>
+                  {appliedDiscount && qoynsDiscountAmount > 0 && (
+                    <div className={styles.totalRowDiscount}>
+                      <span>Qoyns Discount</span>
+                      <span>- AED {qoynsDiscountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
                   {userRole === 'influencer' && useCashWallet && cashWalletDiscountAmount > 0 && (
                     <div className={styles.totalRowDiscount}>
                       <span>Cash Wallet</span>

@@ -19,7 +19,9 @@ export default function ProductCard({
   deliveryTime,
   image,
   badge = "-$500 on your first order",
-  showIcons = true
+  showIcons = true,
+  priceWithVat,
+  discountPriceWithVat
 }) {
   const router = useRouter()
   const dispatch = useDispatch()
@@ -110,13 +112,19 @@ export default function ProductCard({
       ; (async () => {
         const userId = await getUserFromCookies()
 
+        const parsedPrice = typeof price === 'string' ? Number(String(price).replace(/[^0-9.]/g, '')) : price
+        const effectiveVat = discountPriceWithVat ?? priceWithVat ?? parsedPrice
+        const pVat = priceWithVat ?? parsedPrice
+        const dVat = (discountPriceWithVat != null && Number(discountPriceWithVat) > 0) ? discountPriceWithVat : effectiveVat
         const cartItem = {
           userId,
           productId: id,
           name: title,
-          price: typeof price === 'string' ? Number(String(price).replace(/[^0-9.]/g, '')) : price,
+          price: effectiveVat,
           quantity: 1,
-          image: image
+          image: image,
+          price_with_vat: pVat,
+          discount_price_with_vat: dVat
         }
 
         const result = await dispatch(addToCart(cartItem))

@@ -15,19 +15,24 @@ import { buildFacetsFromCategoryFilters } from '@/utils/categoryFilters'
 import { buildFacetsFromBrandFilters } from '@/utils/brandFilters'
 import { buildFacetsFromStoreFilters } from '@/utils/storeFilters'
 
-// Helper function to transform API product data
+// Helper function to transform API product data (display and cart use VAT-inclusive prices)
 const transformProductData = (apiProduct) => {
-  const savings = apiProduct.discount_price ? apiProduct.price - apiProduct.discount_price : 0
+  const priceWithVat = apiProduct.price_with_vat ?? apiProduct.price
+  const discountPriceWithVat = apiProduct.discount_price_with_vat ?? apiProduct.discount_price
+  const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
+  const savings = (priceWithVat != null && discountPriceWithVat != null && discountPriceWithVat > 0) ? priceWithVat - discountPriceWithVat : 0
   return {
     id: apiProduct._id,
     slug: apiProduct.slug,
     title: apiProduct.title,
-    price: `AED ${(apiProduct.discount_price !== undefined && apiProduct.discount_price !== null) ? apiProduct.discount_price : (apiProduct.price || '0')}`,
-    originalPrice: apiProduct.price,
+    price: `AED ${effectivePrice ?? '0'}`,
+    originalPrice: priceWithVat,
     rating: apiProduct.average_rating || 4.5,
     deliveryTime: "30 Min",
     image: apiProduct.images?.[0]?.url || '/iphone.jpg',
-    badge: savings > 0 ? `Save AED ${savings}` : null
+    badge: savings > 0 ? `Save AED ${savings}` : null,
+    priceWithVat: priceWithVat != null ? Number(priceWithVat) : undefined,
+    discountPriceWithVat: discountPriceWithVat != null && Number(discountPriceWithVat) > 0 ? Number(discountPriceWithVat) : undefined
   }
 }
 
@@ -1082,16 +1087,18 @@ export default function BrandPage() {
     fetchData()
   }, [slug, storeId, categoryLevel, categoryId, source, debouncedFilters, currentPage, sortBy])
 
-  // Transform API data; when sorting by price, sort by discount price (effective price) on the frontend
+  // Transform API data; when sorting by price, sort by discounted price with VAT (effective price) on the frontend
   const transformedProducts = useMemo(() => {
-    const getEffectivePrice = (p) => {
-      const discount = p.discount_price != null && Number(p.discount_price) > 0 ? Number(p.discount_price) : null
-      return discount !== null ? discount : (Number(p.price) || 0)
+    const getEffectivePriceWithVat = (p) => {
+      const discountWithVat = p.discount_price_with_vat != null && Number(p.discount_price_with_vat) > 0 ? Number(p.discount_price_with_vat) : null
+      if (discountWithVat !== null) return discountWithVat
+      const priceWithVat = p.price_with_vat != null ? Number(p.price_with_vat) : null
+      return priceWithVat !== null ? priceWithVat : (Number(p.price) || 0)
     }
     if (sortBy === 'price_asc' || sortBy === 'price_desc') {
       const sorted = [...brandProducts].sort((a, b) => {
-        const pa = getEffectivePrice(a)
-        const pb = getEffectivePrice(b)
+        const pa = getEffectivePriceWithVat(a)
+        const pb = getEffectivePriceWithVat(b)
         return sortBy === 'price_asc' ? pa - pb : pb - pa
       })
       return sorted.map(transformProductData)
