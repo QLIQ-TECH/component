@@ -585,54 +585,38 @@ const OrderHistoryPage = () => {
 
   const handleBuyAgain = async () => {
     try {
-      // Get the first item from the order (or the specific product if filtered)
-      const item = orderData?.items?.[0];
+      const items = Array.isArray(orderData?.items) ? orderData.items : [];
 
-      if (!item) {
-        showToast('No product found to add to cart', 'error');
+      if (!items.length) {
+        showToast('No products found to add to cart', 'error');
         return;
       }
+      
+      // Fire all add-to-cart requests in parallel with minimal payload
+      const addPromises = items.map((item) => {
+        const productId = item.productId || item.id;
+        const quantity = item.quantity || 1;
+        if (!productId) return null;
+        return dispatch(addToCart({ productId, quantity }));
+      }).filter(Boolean);
 
-      // Get user ID for cart operations
-      const userId = await getUserFromCookies();
-      if (!userId) {
-        showToast('Please login to add items to cart', 'error');
-        return;
-      }
+      const results = await Promise.all(addPromises);
 
-      // Prepare cart item data
-      const cartItem = {
-        productId: item.productId,
-        name: item.name,
-        price: item.price || item.unitPrice,
-        quantity: item.quantity,
-        image: item.image || '/iphone.jpg', // fallback image
-        brand: item.brand || 'Product'
-      };
+      const successCount = results.filter(result => addToCart.fulfilled.match(result)).length;
 
-      console.log('Adding to cart:', cartItem);
-
-      // Add to cart
-      const result = await dispatch(addToCart({
-        userId,
-        productId: cartItem.productId,
-        name: cartItem.name,
-        price: cartItem.price,
-        quantity: cartItem.quantity,
-        image: cartItem.image,
-        brand: cartItem.brand
-      }));
-
-      if (addToCart.fulfilled.match(result)) {
-        showToast('Item added to cart successfully!', 'success');
-        // Navigate to checkout page
+      if (successCount > 0) {
+        const message = successCount > 1
+          ? `Added ${successCount} items to cart successfully!`
+          : 'Item added to cart successfully!';
+        showToast(message, 'success');
+        // Navigate to checkout page after all items are processed
         window.location.href = '/checkout';
       } else {
-        showToast('Failed to add item to cart. Please try again.', 'error');
+        showToast('Failed to add items to cart. Please try again.', 'error');
       }
     } catch (error) {
-      console.error('Error adding to cart:', error);
-      showToast('Error adding item to cart. Please try again.', 'error');
+      console.error('Error adding items to cart from Buy Again:', error);
+      showToast('Error adding items to cart. Please try again.', 'error');
     }
   };
 
