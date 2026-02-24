@@ -252,6 +252,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
             <span className="original-price">AED {product.originalPrice.toLocaleString()}</span>
             <span className="current-price">AED {product.price.toLocaleString()}</span>
             <span className="discount">{product.discount}% Off</span>
+            <span className="vat-note">Inclusive of VAT</span>
           </div>
 
           {/* Color Selection - Only show if multiple colors available */}
@@ -700,6 +701,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           display: flex;
           align-items: center;
           gap: 16px;
+          flex-wrap: wrap;
         }
 
         .original-price {
@@ -719,6 +721,12 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           color: #1FC70A;
           font-size: 14px;
           font-weight: 600;
+        }
+
+        .vat-note {
+          font-size: 12px;
+          font-weight: 500;
+          color: #666;
         }
 
         .description {
