@@ -14,6 +14,7 @@ import Orders from '../../components/profile/Orders/Orders'
 import Addresses from '../../components/profile/Addresses/Addresses'
 import AddCard from '../../components/profile/AddCard/AddCard'
 import QoynsHistory from '../../components/profile/QoynsHistory/QoynsHistory'
+import CashWalletHistory from '../../components/profile/CashWalletHistory/CashWalletHistory'
 import SendQoyn from '../../components/profile/SendQoyn/SendQoyn'
 import NewAddress from '../../components/profile/NewAddress/newAddress'
 import LocationModal from '../../components/LocationModal'
@@ -76,7 +77,7 @@ export default function ProfilePage() {
 
   // Fetch profile data only when on tabs that require it
   useEffect(() => {
-    const tabsThatDoNotNeedProfile = new Set(['orders', 'qoyns-wallet', 'qoyns-history', 'send-qoyn'])
+    const tabsThatDoNotNeedProfile = new Set(['orders', 'qoyns-wallet', 'qoyns-history', 'cash-wallet-history', 'send-qoyn'])
     if (!tabsThatDoNotNeedProfile.has(activeTab)) {
       dispatch(fetchProfile())
     }
@@ -212,6 +213,16 @@ export default function ProfilePage() {
                 </button>
               </div>
             ) : null}
+            {user?.role === 'influencer' && (activeTab === 'cash-wallet' || activeTab === 'cash-wallet-history') ? (
+              <div className={styles.qoynsActionsRow}>
+                <button
+                  className={`${styles.addCardBtn} ${activeTab === 'cash-wallet-history' ? styles.active : ''}`}
+                  onClick={() => handleTabChange('cash-wallet-history')}
+                >
+                  History
+                </button>
+              </div>
+            ) : null}
             {activeTab === 'orders' && (
               <div className={styles.qoynsActionsRow}>
                 <div className={styles.statusDropdownWrapper}>
@@ -311,6 +322,10 @@ export default function ProfilePage() {
               <div className={styles.sectionContent}>
                 <QoynsHistory user={user} />
               </div>
+            ) : activeTab === 'cash-wallet-history' && user?.role === 'influencer' ? (
+              <div className={styles.sectionContent}>
+                <CashWalletHistory user={user} />
+              </div>
             ) : activeTab === 'send-qoyn' ? (
               <div className={styles.sectionContent}>
                 <SendQoyn
@@ -356,6 +371,7 @@ export default function ProfilePage() {
                 )}
                 {activeTab === 'qoyns-wallet' && null}
                 {activeTab === 'qoyns-history' && null}
+                {activeTab === 'cash-wallet-history' && null}
                 {activeTab === 'send-qoyn' && null}
                 {activeTab === 'orders' && null}
                 {activeTab === 'addresses' && (
@@ -407,7 +423,7 @@ export default function ProfilePage() {
             </button>
             <h2 id="coming-soon-title" className={styles.comingSoonTitle}>Coming Soon</h2>
             <p className={styles.comingSoonText}>
-              QLIQ Plus is on its way. Stay tuned for exclusive benefits and more.
+              IQLIQ Plus is on its way. Stay tuned for exclusive benefits and more.
             </p>
             <button
               type="button"

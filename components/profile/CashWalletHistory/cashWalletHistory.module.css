@@ -1,0 +1,52 @@
+.historyList {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 40px 12px;
+}
+
+.historyItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e5e5e5;
+  padding: 20px 32px;
+  gap: 24px;
+}
+
+.historyLeft {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #E5F0FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0082FF;
+  margin-bottom: 2px;
+}
+
+.date {
+  font-size: 15px;
+  color: #222;
+  font-weight: 500;
+}
+
+.amount {
+  font-size: 24px;
+  font-weight: 700;
+  color: #222;
+}

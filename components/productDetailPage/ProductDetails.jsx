@@ -700,6 +700,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           display: flex;
           align-items: center;
           gap: 16px;
+          flex-wrap: wrap;
         }
 
         .original-price {
@@ -719,6 +720,12 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           color: #1FC70A;
           font-size: 14px;
           font-weight: 600;
+        }
+
+        .vat-note {
+          font-size: 12px;
+          font-weight: 500;
+          color: #666;
         }
 
         .description {

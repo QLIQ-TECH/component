@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchOrders } from '../../store/slices/profileSlice';
 import { createProductReview, updateProductReview, clearReviewState } from '../../store/slices/reviewSlice';
-import { addToCart } from '../../store/slices/cartSlice';
+import { clickCart } from '../../store/slices/cartSlice';
 import { getAuthToken, getUserFromCookies } from '../../utils/userUtils';
 import { useToast } from '../../contexts/ToastContext';
 import { orders as orderEndpoints } from '../../store/api/endpoints';
@@ -38,6 +38,7 @@ const OrderHistoryPage = () => {
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState(null);
+  const [buyAgainLoading, setBuyAgainLoading] = useState(false);
 
   // Fetch order by ID directly from API
   useEffect(() => {
@@ -584,55 +585,52 @@ const OrderHistoryPage = () => {
   const handleCancelReview = handleCancelEdit;
 
   const handleBuyAgain = async () => {
+    if (buyAgainLoading) return;
+
     try {
-      // Get the first item from the order (or the specific product if filtered)
-      const item = orderData?.items?.[0];
+      const items = Array.isArray(orderData?.items) ? orderData.items : [];
 
-      if (!item) {
-        showToast('No product found to add to cart', 'error');
+      if (!items.length) {
+        showToast('No products found to add to cart', 'error');
         return;
       }
 
-      // Get user ID for cart operations
-      const userId = await getUserFromCookies();
-      if (!userId) {
-        showToast('Please login to add items to cart', 'error');
+      // Build productIds array - repeat productId for each quantity (e.g. qty 3 = id appears 3 times)
+      // Handle productId from various formats: item.productId, item.id, item.product?._id
+      const productIds = items
+        .map((item) => {
+          const rawId = item.productId ?? item.id ?? item.product?._id ?? item.product?.id;
+          const productId = rawId != null ? String(rawId).trim() : null;
+          const quantity = Math.max(1, Number(item.quantity) || 1);
+          if (!productId) return null;
+          return Array(quantity).fill(productId);
+        })
+        .filter(Boolean)
+        .flat();
+
+      if (!productIds.length) {
+        showToast('No valid products found to add to cart', 'error');
         return;
       }
 
-      // Prepare cart item data
-      const cartItem = {
-        productId: item.productId,
-        name: item.name,
-        price: item.price || item.unitPrice,
-        quantity: item.quantity,
-        image: item.image || '/iphone.jpg', // fallback image
-        brand: item.brand || 'Product'
-      };
+      setBuyAgainLoading(true);
+      const result = await dispatch(clickCart({ productIds, quantity: 1 }));
 
-      console.log('Adding to cart:', cartItem);
-
-      // Add to cart
-      const result = await dispatch(addToCart({
-        userId,
-        productId: cartItem.productId,
-        name: cartItem.name,
-        price: cartItem.price,
-        quantity: cartItem.quantity,
-        image: cartItem.image,
-        brand: cartItem.brand
-      }));
-
-      if (addToCart.fulfilled.match(result)) {
-        showToast('Item added to cart successfully!', 'success');
-        // Navigate to checkout page
+      if (clickCart.fulfilled.match(result)) {
+        const itemCount = productIds.length;
+        const message = itemCount > 1
+          ? `Added ${itemCount} items to cart successfully!`
+          : 'Item added to cart successfully!';
+        showToast(message, 'success');
         window.location.href = '/checkout';
       } else {
-        showToast('Failed to add item to cart. Please try again.', 'error');
+        showToast(result.payload || 'Failed to add items to cart. Please try again.', 'error');
       }
     } catch (error) {
-      console.error('Error adding to cart:', error);
-      showToast('Error adding item to cart. Please try again.', 'error');
+      console.error('Error adding items to cart from Buy Again:', error);
+      showToast(error?.message || 'Error adding items to cart. Please try again.', 'error');
+    } finally {
+      setBuyAgainLoading(false);
     }
   };
 
@@ -717,36 +715,9 @@ const OrderHistoryPage = () => {
     }
   };
 
-  // Compute per-item unit price including VAT and Tax
-  const getItemUnitPriceWithTaxes = (item, order) => {
+  // Compute per-item unit price (no VAT - price is already inclusive)
+  const getItemUnitPriceWithTaxes = (item) => {
     const base = Number(item?.unitPrice ?? item?.price ?? 0) || 0;
-    const qty = Math.max(1, Number(item?.quantity) || 1);
-    const lineTax = Number(item?.tax) || 0;
-    const lineVat = Number(item?.vat) || 0;
-
-    // Prefer item-level tax/vat if provided (assumed totals for the line)
-    if (lineTax || lineVat) {
-      const perUnitTaxes = (lineTax + lineVat) / qty;
-      const inclusive = base + perUnitTaxes;
-      return Number(inclusive.toFixed(2));
-    }
-
-    // Otherwise compute a tax rate from order totals and apply to the unit price
-    const derivedSubtotal = Number(order?.subtotal);
-    const fallbackSubtotal = Array.isArray(order?.items)
-      ? order.items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0)
-      : 0;
-    const orderSubtotal = (isNaN(derivedSubtotal) || derivedSubtotal <= 0) ? fallbackSubtotal : derivedSubtotal;
-    const orderTax = Number(order?.tax) || 0;
-    const orderVat = Number(order?.vat) || 0;
-
-    if (orderSubtotal > 0 && (orderTax || orderVat)) {
-      const taxRate = (orderTax + orderVat) / orderSubtotal; // fraction applied to unit price
-      const inclusive = base * (1 + taxRate);
-      return Number(inclusive.toFixed(2));
-    }
-
-    // Fallback: no taxes available
     return Number(base.toFixed(2));
   };
 
@@ -881,19 +852,8 @@ const OrderHistoryPage = () => {
     return Math.max(0, discountedSubtotal); // Ensure it doesn't go negative
   };
 
-  // Compute total VAT across displayed items - VAT should be calculated on discounted amount at 5%
-  const getItemsVat = (order) => {
-    if (!order || !Array.isArray(order.items)) return 0;
-
-    const discountedSubtotal = getDiscountedSubtotal(order);
-
-    // Always use 5% VAT rate
-    const vatRate = 0.05;
-
-    // Calculate VAT on discounted subtotal (matching checkout logic)
-    const vatAmount = discountedSubtotal * vatRate;
-    return Number(vatAmount.toFixed(2));
-  };
+  // No VAT - price is already inclusive
+  const getItemsVat = () => 0;
 
   if (orderLoading) {
     return (
@@ -1411,35 +1371,36 @@ const OrderHistoryPage = () => {
                   </div>
                 )}
 
-                {/* Cash Wallet - below subtotal */}
+                {/* Delivery */}
+                <div className={styles.costItem}>
+                  <span className={styles.costLabel}>Delivery</span>
+                  <span className={styles.costValue}>
+                    AED {((orderData.shippingCost === 0 || !orderData.shippingCost) ? 9.00 : Number(orderData.shippingCost)).toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Amount to Pay - subtotal + delivery only (above the line) */}
+                <div className={styles.costItem}>
+                  <span className={styles.costLabel}>Amount to Pay</span>
+                  <span className={styles.costValue}>
+                    AED {(
+                      getDiscountedItemsSubtotal(orderData) +
+                      ((orderData.shippingCost === 0 || !orderData.shippingCost) ? 9.00 : Number(orderData.shippingCost))
+                    ).toFixed(2)}
+                  </span>
+                </div>
+
+                {/* Cash Wallet Discount - above the line */}
                 {(Number(orderData.cashWalletAmount) || 0) > 0 && (
                   <div className={styles.costItem}>
-                    <span className={styles.costLabel}>Cash Wallet</span>
+                    <span className={styles.costLabel}>Cash Wallet Discount</span>
                     <span className={styles.discountValue || styles.costValue}>
                       - AED {(Number(orderData.cashWalletAmount) || 0).toFixed(2)}
                     </span>
                   </div>
                 )}
 
-                {/* Subtotal after discount */}
-                {((Number(orderData.qoynsDiscountAmount) || 0) > 0 || (Number(orderData.cashWalletAmount) || 0) > 0) && (
-                  <div className={styles.costItem}>
-                    <span className={styles.costLabel}>Subtotal after discount</span>
-                    <span className={styles.costValue}>
-                      AED {(getDiscountedItemsSubtotal(orderData) - (Number(orderData.qoynsDiscountAmount) || 0) - (Number(orderData.cashWalletAmount) || 0)).toFixed(2)}
-                    </span>
-                  </div>
-                )}
-
-                {/* Shipping */}
-                <div className={styles.costItem}>
-                  <span className={styles.costLabel}>Shipping</span>
-                  <span className={styles.costValue}>
-                    AED {((orderData.shippingCost === 0 || !orderData.shippingCost) ? 9.00 : Number(orderData.shippingCost)).toFixed(2)}
-                  </span>
-                </div>
-
-                {/* Order Total */}
+                {/* Order Total - final amount, below the line */}
                 <div className={`${styles.costItem} ${styles.totalItem}`}>
                   <span className={styles.costLabel}>Order Total</span>
                   <span className={styles.totalValue}>
@@ -1457,8 +1418,9 @@ const OrderHistoryPage = () => {
                 <button
                   className={styles.buyAgainButton}
                   onClick={handleBuyAgain}
+                  disabled={buyAgainLoading}
                 >
-                  Buy Again
+                  {buyAgainLoading ? 'Adding...' : 'Buy Again'}
                 </button>
                 <button 
                   className={styles.downloadInvoiceButton}

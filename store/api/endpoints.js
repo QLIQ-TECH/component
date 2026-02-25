@@ -273,6 +273,7 @@ export const auth = {
 export const cart = {
   base: BASES.cart,
   add: `${BASES.cart}/cart/add`,
+  clickCart: `${BASES.cart}/cart/click-cart`,
   get: `${BASES.cart}/cart`,
   update: `${BASES.cart}/cart/update`,
   remove: `${BASES.cart}/cart/remove`,
@@ -342,6 +343,8 @@ export const subscription = {
   webSubscription: `${BASES.subPayment}/wallet/web-subscription`,
 }
 
+const WALLET_USER_BASE = process.env.NEXT_PUBLIC_WALLET_USER_BASE_URL || 'https://wallet.iqliq.ae/api'
+
 export const wallet = {
   base: BASES.wallet,
   userBalance: `${BASES.wallet}/wallet/qoyn/user-balance`,
@@ -350,6 +353,7 @@ export const wallet = {
   redeemHistory: `${BASES.wallet}/wallet/qoyn/redeem-history`,
   redeemableCashBalance: `${BASES.wallet}/wallet/cash/redeemable-balance`,
   redeemCash: `${BASES.wallet}/wallet/cash/redeem`,
+  cashHistory: (page = 1, limit = 50) => `${WALLET_USER_BASE}/wallet/user/cash-history?page=${page}&limit=${limit}`,
 }
 
 export const delivery = {
