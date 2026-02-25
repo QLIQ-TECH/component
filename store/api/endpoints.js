@@ -273,6 +273,7 @@ export const auth = {
 export const cart = {
   base: BASES.cart,
   add: `${BASES.cart}/cart/add`,
+  clickCart: `${BASES.cart}/cart/click-cart`,
   get: `${BASES.cart}/cart`,
   update: `${BASES.cart}/cart/update`,
   remove: `${BASES.cart}/cart/remove`,

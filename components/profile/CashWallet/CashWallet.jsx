@@ -25,7 +25,7 @@ export default function CashWallet() {
           {cashLoading ? '' : `$${redeemableCashUsd.toFixed(2)}`}
         </p>
         {/* <button className={styles.withdrawBtn}>Send Request To Withdraw</button> */}
-        <button className={styles.useQoynsBtn}>Use Qoyns To Shop</button>
+        {/* <button className={styles.useQoynsBtn}>Use Qoyns To Shop</button> */}
       </div>
     </div>
   )

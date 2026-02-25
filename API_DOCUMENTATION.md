@@ -713,6 +713,40 @@ curl -X POST "https://backendcart.qliq.ae/api/cart/add" \
 
 ---
 
+### 6.2.1 Click Cart (Add Multiple Products)
+
+**Endpoint:** `POST /api/cart/click-cart`
+
+**Description:** Add multiple products to cart at once. Each product is added with quantity 1 (or the specified quantity). Returns the full cart in the same format as Get Cart.
+
+**Used In:**
+- 🔧 Redux: `store/slices/cartSlice.js` - `clickCart` action
+
+**Authentication:** Required
+
+**Request Body:**
+```json
+{
+  "productIds": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012", "507f1f77bcf86cd799439013"],
+  "quantity": 1
+}
+```
+
+**cURL Command:**
+```bash
+curl -X POST "https://backendcart.qliq.ae/api/cart/click-cart" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -d '{
+    "productIds": ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012"],
+    "quantity": 1
+  }'
+```
+
+**Response:** Same format as Get Cart - returns full cart with populated items, totalItems, totalPrice.
+
+---
+
 ### 6.3 Update Cart Item
 
 **Endpoint:** `PUT /api/cart/update`

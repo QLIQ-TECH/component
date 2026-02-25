@@ -133,7 +133,7 @@ export default function QoynsHistory() {
               <div className={styles.date}>{formatDate(item.date)}</div>
             </div>
           </div>
-          <div className={styles.amount}>{item.amount?.toLocaleString() || 0}</div>
+          <div className={styles.amount}>Q {item.amount?.toLocaleString() || 0}</div>
         </div>
       ))}
     </div>
