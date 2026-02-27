@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import Script from 'next/script'
 
 const faqData = [
   {
@@ -22,6 +23,20 @@ const faqData = [
   }
 ]
 
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  '@id': 'https://www.iqliq.ae/#faq',
+  mainEntity: faqData.map((item) => ({
+    '@type': 'Question',
+    name: item.question.trim(),
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: item.answer,
+    },
+  })),
+}
+
 export default function FAQ() {
   const [openIndex, setOpenIndex] = useState(0)
 
@@ -31,6 +46,15 @@ export default function FAQ() {
 
   return (
     <div className="faq-section">
+      {/* FAQ Schema JSON-LD */}
+      <Script
+        id="faq-schema"
+        type="application/ld+json"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(faqSchema),
+        }}
+      />
       <div className="faq-container">
         <div className="faq-content">
           <div className="faq-text">

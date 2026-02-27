@@ -11,6 +11,7 @@ import CategoryCard from '@/components/CategoryCard'
 import InfluencerCard from '@/components/InfluencerCard'
 import FAQ from '@/components/FAQ'
 import Footer from '@/components/Footer'
+import Script from 'next/script'
 import QuickNav from '@/components/QuickNav'
 import StoreCard from '@/components/StoreCard'
 import Image from 'next/image'
@@ -537,6 +538,30 @@ export default function Home() {
 
   return (
     <>
+      {/* WebSite Schema with SearchAction - homepage */}
+      <Script
+        id="website-schema"
+        type="application/ld+json"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            '@id': 'https://www.iqliq.ae/#website',
+            url: 'https://www.iqliq.ae/',
+            name: 'IQLIQ',
+            publisher: {
+              '@id': 'https://www.iqliq.ae/#organization',
+            },
+            potentialAction: {
+              '@type': 'SearchAction',
+              target: 'https://www.iqliq.ae/search?q={search_term_string}',
+              'query-input': 'required name=search_term_string',
+            },
+          }),
+        }}
+      />
+
       <Navigation />
       <main className="home-page">
         {/* <QuickNav /> */}
