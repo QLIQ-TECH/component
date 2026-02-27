@@ -252,7 +252,6 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
             <span className="original-price">AED {product.originalPrice.toLocaleString()}</span>
             <span className="current-price">AED {product.price.toLocaleString()}</span>
             <span className="discount">{product.discount}% Off</span>
-            <span className="vat-note">Inclusive of VAT</span>
           </div>
 
           {/* Color Selection - Only show if multiple colors available */}

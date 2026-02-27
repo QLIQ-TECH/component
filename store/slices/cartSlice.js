@@ -123,6 +123,45 @@ export const removeFromCart = createAsyncThunk(
   }
 )
 
+export const clickCart = createAsyncThunk(
+  'cart/clickCart',
+  async ({ productIds, quantity = 1 }, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      const mongoUserId = await getUserFromCookies()
+
+      if (!Array.isArray(productIds) || productIds.length === 0) {
+        return rejectWithValue('At least one product ID is required')
+      }
+
+      const payload = {
+        productIds,
+        quantity: Math.max(1, quantity || 1),
+        ...(mongoUserId && { mongoUserId }),
+      }
+
+      const response = await fetch(cart.clickCart, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const text = await response.text()
+        throw new Error(text || `HTTP error ${response.status}`)
+      }
+
+      const data = await response.json()
+      return data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
 export const moveToWishlist = createAsyncThunk(
   'cart/moveToWishlist',
   async ({ userId, productId }, { rejectWithValue }) => {
@@ -301,6 +340,22 @@ const cartSlice = createSlice({
         }
       })
       .addCase(removeFromCart.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.payload
+      })
+      // Click cart (add multiple products)
+      .addCase(clickCart.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(clickCart.fulfilled, (state, action) => {
+        state.loading = false
+        const cartData = action.payload.data?.cart || action.payload.cart || action.payload
+        state.items = cartData.items || []
+        state.itemsCount = cartData.totalItems || cartData.itemsCount || 0
+        state.total = cartData.totalPrice || cartData.total || 0
+      })
+      .addCase(clickCart.rejected, (state, action) => {
         state.loading = false
         state.error = action.payload
       })

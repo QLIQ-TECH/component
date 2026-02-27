@@ -42,6 +42,12 @@ const formatStatus = (status) => {
   return String(status).charAt(0).toUpperCase() + String(status).slice(1).toLowerCase()
 }
 
+const formatAmount = (item) => {
+  const amount = typeof item.amount === 'number' ? item.amount : parseFloat(item.amount) || 0
+  const displayAmount = Math.abs(amount).toFixed(2)
+  return `- AED ${displayAmount}`
+}
+
 export default function CashWalletHistory() {
   const [historyData, setHistoryData] = useState([])
   const [loading, setLoading] = useState(true)
@@ -141,7 +147,7 @@ export default function CashWalletHistory() {
               <div className={styles.date}>{formatDate(item.date)}</div>
             </div>
           </div>
-          <div className={styles.amount}>AED {typeof item.amount === 'number' ? item.amount.toFixed(2) : (item.amount || '0.00')}</div>
+          <div className={styles.amount}>{formatAmount(item)}</div>
         </div>
       ))}
     </div>
