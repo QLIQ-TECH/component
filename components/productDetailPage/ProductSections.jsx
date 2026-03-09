@@ -880,7 +880,7 @@ export default function ProductSections({ relatedProducts, productData }) {
           max-height: 600px;
           object-fit: cover;
         }
-
+ 
         .specifications-container {
           max-width: 1392px;
           padding-left: 30px;
