@@ -152,7 +152,7 @@ export default function ProductDetailsSkeleton() {
           100% { transform: translateX(300%); }
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 767px) {
           .product-main { grid-template-columns: 1fr; gap: 40px; }
           .main-image-container { width: 100%; height: 400px; }
           .btn { max-width: 100%; }

@@ -138,7 +138,13 @@ export default function SectionHeader({
           fill-opacity: 0.24 !important;
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
+          .section-title {
+            font-size: 32px;
+          }
+        }
+
+        @media (max-width: 767px) {
           .section-header {
             flex-direction: column;
             gap: 8px;

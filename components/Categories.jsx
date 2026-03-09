@@ -89,6 +89,16 @@ export default function Categories() {
             modules={[SwiperNavigation]}
             slidesPerView={2.7}
             spaceBetween={10}
+            breakpoints={{
+              744: {
+                slidesPerView: 5.2,
+                spaceBetween: 16,
+              },
+              768: {
+                slidesPerView: 5.5,
+                spaceBetween: 16,
+              }
+            }}
             grabCursor={true}
             freeMode={true}
             className="categories-swiper-container"
@@ -222,8 +232,21 @@ export default function Categories() {
           line-height: 150%;
           margin: 0;
         }
-
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) and (min-width: 768px) {
+          .categories-content.desktop {
+            gap: 16px;
+          }
+          
+          .category-icon {
+            width: 110px;
+            height: 70px;
+          }
+          
+          .category-text h3 {
+            font-size: 14px;
+          }
+        }
+        @media (max-width: 767px) {
           .categories-content.desktop {
             display: none;
           }
