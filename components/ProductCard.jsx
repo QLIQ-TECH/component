@@ -313,7 +313,9 @@ export default function ProductCard({
           display: flex;
           flex-direction: column;
           align-items: stretch;
-          width: 322px;
+          width: 100%;
+          min-width: 0;
+          max-width: 322px;
           min-height: 490px;
           gap: 16px;
           position: relative;

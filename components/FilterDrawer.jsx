@@ -718,14 +718,18 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
         }
         .filter-drawer {
           background: #fff;
-          width: 320px;
+          width: ${inline ? '100%' : '320px'};
           max-width: 100vw;
+          box-sizing: border-box;
           height: ${inline ? 'auto' : '100vh'};
           box-shadow: ${inline ? '0 2px 8px rgba(0,0,0,0.1)' : '2px 0 16px rgba(0,0,0,0.08)'};
           display: flex;
           flex-direction: column;
           border-radius: ${inline ? '12px' : '0'};
           ${inline ? '' : 'animation: slideInLeft 0.25s cubic-bezier(.4,0,.2,1);'}
+        }
+        .filter-drawer * {
+          box-sizing: border-box;
         }
         @keyframes slideInLeft {
           from { transform: translateX(-100%); }
@@ -843,7 +847,7 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
           justify-content: space-between;
           align-items: center;
           width: 100%;
-          min-width: 180px;
+          min-width: 0;
         }
         .range-price-min {
           text-align: left;
