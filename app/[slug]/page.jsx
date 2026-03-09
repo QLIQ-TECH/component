@@ -1677,7 +1677,7 @@ export default function BrandPage() {
             font-size: 14px !important;
             border-radius: 25px !important;
           }
-
+ 
           .grid-mobile-column {
             display: flex;
             flex-direction: column;
