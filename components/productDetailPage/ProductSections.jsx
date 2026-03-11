@@ -41,7 +41,7 @@ export default function ProductSections({ relatedProducts, productData }) {
   // Check screen size for mobile detection
   useEffect(() => {
     const checkScreenSize = () => {
-      setIsMobile(window.innerWidth < 768);
+      setIsMobile(window.innerWidth < 834);
     };
 
     // Initial check
@@ -326,7 +326,7 @@ export default function ProductSections({ relatedProducts, productData }) {
       specLabels.add(attr.label.toLowerCase());
     }
   });
-  
+
   const leftTableData = allSpecs.slice(0, Math.ceil(allSpecs.length / 2));
   const rightTableData = allSpecs.slice(Math.ceil(allSpecs.length / 2));
 
@@ -373,8 +373,15 @@ export default function ProductSections({ relatedProducts, productData }) {
             <Swiper
               ref={relatedProductsSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={1.2}
+              spaceBetween={20}
+              breakpoints={{
+                480: { slidesPerView: 2.2, spaceBetween: 20 },
+                834: { slidesPerView: 3.2, spaceBetween: 40 },
+                1024: { slidesPerView: 3.5, spaceBetween: 40 },
+                1280: { slidesPerView: 4.5, spaceBetween: 40 },
+                1440: { slidesPerView: 'auto', spaceBetween: 40 }
+              }}
               grabCursor={true}
               freeMode={true}
               className="bestsellers-swiper"
@@ -571,7 +578,7 @@ export default function ProductSections({ relatedProducts, productData }) {
                   ))
                 ) : (
                   <div className="no-images-text">
-                    
+
                   </div>
                 )}
               </div>
@@ -634,8 +641,15 @@ export default function ProductSections({ relatedProducts, productData }) {
             <Swiper
               ref={customerAlsoLikedSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={1.2}
+              spaceBetween={20}
+              breakpoints={{
+                480: { slidesPerView: 2.2, spaceBetween: 20 },
+                834: { slidesPerView: 3.2, spaceBetween: 40 },
+                1024: { slidesPerView: 3.5, spaceBetween: 40 },
+                1280: { slidesPerView: 4.5, spaceBetween: 40 },
+                1440: { slidesPerView: 'auto', spaceBetween: 40 }
+              }}
               grabCursor={true}
               freeMode={true}
               className="bestsellers-swiper"
@@ -695,7 +709,7 @@ export default function ProductSections({ relatedProducts, productData }) {
         }
 
         .bestseller-slide {
-          width: auto;
+          width: 100%;
           height: auto;
         }
 
@@ -922,7 +936,7 @@ export default function ProductSections({ relatedProducts, productData }) {
         .spec-table td {
           color: #222;
         }
-        @media (max-width: 767px) {
+        @media (max-width: 833px) {
           .spec-table {
             width: 100%;
             max-width: 100%;
@@ -986,7 +1000,7 @@ export default function ProductSections({ relatedProducts, productData }) {
           }
         }
 
-        @media (max-width: 767px) {
+        @media (max-width: 833px) {
           .section-title {
             font-size: 28px;
             margin-bottom: 32px;
@@ -1394,7 +1408,7 @@ export default function ProductSections({ relatedProducts, productData }) {
             min-width: 0;
           }
         }
-        @media (max-width: 767px) {
+        @media (max-width: 833px) {
           .reviews-title {
             font-size: 1.3rem;
             margin-bottom: 18px;
@@ -1437,7 +1451,7 @@ export default function ProductSections({ relatedProducts, productData }) {
           }
         }
 
-        @media (max-width: 1200px) and (min-width: 768px) {
+        @media (max-width: 1200px) and (min-width: 834px) {
           .specifications-wrapper {
             flex-direction: column;
             gap: 0;
@@ -1990,7 +2004,7 @@ export default function ProductSections({ relatedProducts, productData }) {
           opacity: 1;
         }
         
-        @media (max-width: 767px) {
+        @media (max-width: 833px) {
           .viewall-content {
             padding: 20px;
             max-width: 95vw;
