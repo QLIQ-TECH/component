@@ -14,7 +14,7 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 32px;
   margin-bottom: 0px;
   width: 100%;
 }
@@ -129,9 +129,11 @@
 
 .profileActions {
   display: flex;
+  flex-direction: column;
   gap: 16px;
-  justify-content: flex-end;
-  margin-bottom: 24px;
+  align-items: flex-end;
+  justify-content: flex-start;
+  margin-bottom: 0;
 }
 
 .updateProfileBtn {
@@ -433,7 +435,7 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 767px) {
   .inputsGrid,
   .loginGrid,
   .passwordGrid {
@@ -455,6 +457,9 @@
     justify-content: center;
     width: 100%;
     flex-wrap: wrap;
+  }
+  .profileActions {
+    align-items: stretch;
   }
   
   .updateProfileBtn, .logoutBtn, .changePasswordBtn, .deleteAccountBtn, .savePasswordBtn, .cancelPasswordBtn {

@@ -21,7 +21,7 @@
 }
 
 .textContent {
-  flex: 1;
+  max-width: 600px;
 }
 
 .title {
@@ -42,9 +42,11 @@
 
 .actionTop {
   display: flex;
+  flex-direction: column;
   gap: 16px;
-  justify-content: flex-end;
-  margin-top: 8px;
+  justify-content: flex-start;
+  align-items: flex-end;
+  margin-top: 0;
 }
 
 .upgradeBtn {
@@ -512,15 +514,6 @@
   .container {
     padding: 0 16px; 
   }
-  .header {
-    flex-direction: column;
-    gap: 24px;
-    margin-top: 32px;
-  }
-  .actionTop {
-    width: 100%;
-    justify-content: flex-start;
-  }
   
   /* Tabs Slider for Mobile/Tablet */
   .tabsRow {
@@ -554,7 +547,16 @@
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 767px) {
+  .header {
+    flex-direction: column;
+    gap: 24px;
+    margin-top: 32px;
+  }
+  .actionTop {
+    width: 100%;
+    align-items: stretch;
+  }
   .inputsGrid,
   .loginGrid {
     grid-template-columns: 1fr;

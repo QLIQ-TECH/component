@@ -526,6 +526,10 @@ export default function SearchPage() {
           gap: 24px;
           align-items: flex-start;
           min-height: calc(100vh - 200px);
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow-x: hidden;
         }
         
         .filters-sidebar {
@@ -546,12 +550,17 @@ export default function SearchPage() {
         .content-area { 
           flex: 1;
           min-width: 0; /* allows flex item to shrink below content size */
+          width: 100%;
+          max-width: 100%;
         }
         
         .products-scroll-container {
           width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
           max-height: calc(100vh - 200px);
           overflow-y: auto;
+          overflow-x: hidden;
           padding-right: 8px; /* space for scrollbar */
            /* Hide scrollbar, keep scroll functionality */
            -ms-overflow-style: none; /* IE and Edge */
@@ -569,6 +578,9 @@ export default function SearchPage() {
         .grid-item { 
           display: flex; 
           justify-content: center; 
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
         }
 
         .pagination-wrapper {
@@ -635,6 +647,17 @@ export default function SearchPage() {
         }
 
         @media (max-width: 1024px) {
+          .filters-sidebar { 
+            width: 220px; 
+          }
+          
+          .grid-3 { 
+            grid-template-columns: repeat(2, minmax(0, 1fr)); 
+            gap: 16px;
+          }
+        }
+
+        @media (max-width: 767px) {
           .listing-layout { 
             flex-direction: column; 
             gap: 16px;
@@ -648,11 +671,6 @@ export default function SearchPage() {
             max-height: none;
             overflow-y: visible;
           }
-          
-          .grid-3 { 
-            grid-template-columns: repeat(2, minmax(0, 1fr)); 
-            gap: 16px;
-          }
         }
         
         @media (max-width: 640px) {
@@ -665,12 +683,13 @@ export default function SearchPage() {
         .section-header {
           display: flex;
           width: 100%;
+          box-sizing: border-box;
           max-width: 1392px;
           justify-content: space-between;
           align-items: center;
           margin-bottom: 24px;
-          padding-right: 24px;
-          padding-left: 24px;
+          padding-right: 0;
+          padding-left: 0;
         }
 
         .section-title-wrapper {
