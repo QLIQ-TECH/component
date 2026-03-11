@@ -67,9 +67,9 @@ export default function FAQ() {
                     <button className="toggle-btn" aria-label="Toggle question">
                       <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                         {openIndex === index ? (
-                          <path d="M24 16H16H8" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M24 16H16H8" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         ) : (
-                          <path d="M24 16H16M16 16H8M16 16V8M16 16V24" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M24 16H16M16 16H8M16 16V8M16 16V24" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         )}
                       </svg>
                     </button>
@@ -207,13 +207,40 @@ export default function FAQ() {
         }
 
         @media (max-width: 1024px) {
+          .faq-section {
+            padding: 24px;
+            gap: 40px;
+          }
+
           .faq-content {
             flex-direction: column;
-            gap: 40px;
+            gap: 32px;
+          }
+
+          .faq-text {
+            width: 100%;
+          }
+
+          .faq-title {
+            font-size: 32px;
+          }
+
+          .question-text {
+            font-size: 18px;
+          }
+
+          .answer-text {
+            font-size: 15px;
           }
 
           .faq-image {
             width: 100%;
+            max-width: 520px;
+          }
+
+          .faq-image img {
+            width: 100%;
+            height: auto;
           }
         }
 
@@ -234,7 +261,8 @@ export default function FAQ() {
           .answer-text {
             font-size: 14px;
           }
-            .faq-image {
+
+          .faq-image {
             display: none;
           }
         }
