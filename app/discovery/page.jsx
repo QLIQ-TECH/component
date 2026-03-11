@@ -37,6 +37,9 @@ export default function DiscoveryPage() {
   const newStoresSwiperRef = useRef(null)
   const topStoresSwiperRef = useRef(null)
 
+  // Swiper navigation states
+  const [newStoresNav, setNewStoresNav] = useState({ isBeginning: true, isEnd: false })
+
   // Fetch discovery page data
   useEffect(() => {
     const fetchDiscoveryData = async () => {
@@ -77,13 +80,13 @@ export default function DiscoveryPage() {
   }
 
   const handleNewStoresPrev = () => {
-    if (newStoresSwiperRef.current && newStoresSwiperRef.current.swiper) {
+    if (newStoresSwiperRef.current && newStoresSwiperRef.current.swiper && !newStoresNav.isBeginning) {
       newStoresSwiperRef.current.swiper.slidePrev()
     }
   }
 
   const handleNewStoresNext = () => {
-    if (newStoresSwiperRef.current && newStoresSwiperRef.current.swiper) {
+    if (newStoresSwiperRef.current && newStoresSwiperRef.current.swiper && !newStoresNav.isEnd) {
       newStoresSwiperRef.current.swiper.slideNext()
     }
   }
@@ -133,6 +136,8 @@ export default function DiscoveryPage() {
                 onButtonClick={handleSeeAllNewStores}
                 onPrev={handleNewStoresPrev}
                 onNext={handleNewStoresNext}
+                prevDisabled={newStoresNav.isBeginning || transformedNewStores.length === 0}
+                nextDisabled={newStoresNav.isEnd || transformedNewStores.length === 0}
               />
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '20px' }}>
@@ -150,6 +155,12 @@ export default function DiscoveryPage() {
                   spaceBetween={24}
                   grabCursor={true}
                   freeMode={true}
+                  onSlideChange={(swiper) => {
+                    setNewStoresNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                  }}
+                  onSwiper={(swiper) => {
+                    setNewStoresNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                  }}
                   style={{ width: '1360px' }}
                 >
                   {transformedNewStores.map((store, index) => (

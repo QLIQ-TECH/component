@@ -32,11 +32,17 @@ import {
   setAppliedCoupon,
   clearAppliedCoupon,
   setAppliedGigCompletion,
-  clearAppliedGigCompletion
+  clearAppliedGigCompletion,
+  fetchCountries,
+  fetchCitiesByCountry,
+  fetchZonesByCity,
+  fetchShippingMethods,
+  createStripeHostedCheckoutSession,
+  createCashWalletCheckout,
+  redeemCash
 } from '@/store/slices/checkoutSlice'
 import { fetchProfile } from '@/store/slices/profileSlice'
 import { fetchUserBalance, fetchRedeemableCashBalance } from '@/store/slices/walletSlice'
-import { payment as paymentEndpoints, wallet as walletEndpoints } from '@/store/api/endpoints'
 import { loadStripe } from '@stripe/stripe-js'
 import StripeCheckout from '@/components/StripeCheckout'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
@@ -44,7 +50,26 @@ import { faHome, faBriefcase, faMapMarkerAlt, faCheck, faPlus, faEdit, faTrash }
 import { useToast } from '@/contexts/ToastContext'
 import styles from './checkout.module.css'
 
-const GOOGLE_API_KEY = ''
+const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY || 'AIzaSyDdZ_Y4ANv6qnyWeBebbWA6YoKqMd-o-4Y'
+
+// Map country names to ISO country codes for Google Places API
+const getCountryCode = (countryName) => {
+  const countryCodeMap = {
+    'United Arab Emirates': 'ae',
+    'UAE': 'ae',
+    'United States': 'us',
+    'USA': 'us',
+    'United Kingdom': 'gb',
+    'UK': 'gb',
+    'India': 'in',
+    'Saudi Arabia': 'sa',
+    'Kuwait': 'kw',
+    'Qatar': 'qa',
+    'Oman': 'om',
+    'Bahrain': 'bh'
+  }
+  return countryCodeMap[countryName] || null
+}
 
 // Load Google Maps API with Places library
 const loadGoogleMaps = () => {
@@ -221,9 +246,13 @@ export default function CheckoutPage() {
   
   // State to track address validation error
   const [addressValidationError, setAddressValidationError] = useState(false)
+  const [addressFieldErrors, setAddressFieldErrors] = useState({})
   
   // Ref for address section to scroll to
   const addressSectionRef = useRef(null)
+  const addressLine1AutocompleteRef = useRef(null)
+  const autocompleteInstanceRef = useRef(null)
+  const citiesZonesRef = useRef({ cities: [], zones: [] })
   
   // Applied discount state
   const [appliedDiscount, setAppliedDiscount] = useState(null)
@@ -245,6 +274,14 @@ export default function CheckoutPage() {
 
   const [isLoadingLocation, setIsLoadingLocation] = useState(false)
   const [googleMapsLoaded, setGoogleMapsLoaded] = useState(false)
+
+  // Country, State, City selection state (for address form)
+  const [selectedCountry, setSelectedCountry] = useState('')
+  const [selectedState, setSelectedState] = useState('')
+  const [selectedCity, setSelectedCity] = useState('')
+  
+  // Custom label state for address form
+  const [customLabel, setCustomLabel] = useState('')
 
   // Cart state
   const { items: cartItems, total: cartTotal, loading: cartLoading } = useSelector(state => state.cart)
@@ -310,7 +347,13 @@ export default function CheckoutPage() {
     gigCompletions,
     loadingGigCompletions,
     gigCompletionsError,
-    appliedGigCompletion
+    appliedGigCompletion,
+    countries: apiCountries,
+    loadingCountries,
+    cities: apiCities,
+    loadingCities,
+    zones: apiZones,
+    loadingZones
   } = useSelector(state => state.checkout)
 
   // Combine addresses from both sources to ensure we get all available addresses
@@ -477,6 +520,15 @@ export default function CheckoutPage() {
     return null
   }
 
+  // Helper: fixed discount amount for this item (sales gig only; full fixed amount per product line when gig has customerDiscountFixed)
+  const getProductDiscountAmount = (item) => {
+    if (!hasGigCompletionDiscount(item) || !appliedGigCompletion) return 0
+    if (appliedGigCompletion.customerDiscountPercentage > 0) return 0 // percentage-based, use discountPercentage
+    if (!(appliedGigCompletion.customerDiscountFixed > 0)) return 0
+    // Apply full fixed discount per product (per cart line), not split across all
+    return appliedGigCompletion.customerDiscountFixed
+  }
+
   // Helper function to calculate discounted price for a product
   const getProductDiscountedPrice = (item) => {
     const originalPrice = item.price || 0
@@ -490,17 +542,10 @@ export default function CheckoutPage() {
         const discountPercentage = appliedGigCompletion.customerDiscountPercentage
         discountAmount = (originalPrice * discountPercentage) / 100
       } else if (appliedGigCompletion.customerDiscountFixed > 0) {
-        // For fixed discount, we need to calculate per unit
-        // Since fixed discount is on total, we'll calculate proportionally
-        const itemTotal = originalPrice * (item.quantity || 1)
-        const allMatchingItemsTotal = cartItems
-          .filter(i => hasGigCompletionDiscount(i))
-          .reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 1)), 0)
-        
-        if (allMatchingItemsTotal > 0) {
-          const itemDiscountShare = (itemTotal / allMatchingItemsTotal) * appliedGigCompletion.customerDiscountFixed
-          discountAmount = itemDiscountShare / (item.quantity || 1)
-        }
+        // Fixed discount is applied per product: full amount per cart line, so per-unit = fixed / quantity
+        const fixedPerLine = appliedGigCompletion.customerDiscountFixed
+        const qty = item.quantity || 1
+        discountAmount = fixedPerLine / qty
       }
     }
     
@@ -556,8 +601,8 @@ export default function CheckoutPage() {
             gigCompletionDiscountAmount += (itemTotal * appliedGigCompletion.customerDiscountPercentage) / 100
           })
         } else if (appliedGigCompletion.customerDiscountFixed > 0) {
-          // For fixed discount, apply the full amount (it's already a fixed value)
-          gigCompletionDiscountAmount = appliedGigCompletion.customerDiscountFixed
+          // Fixed discount: apply full amount per matching product (e.g. 18.36 off each product)
+          gigCompletionDiscountAmount = appliedGigCompletion.customerDiscountFixed * matchingItems.length
         }
       }
     }
@@ -567,46 +612,26 @@ export default function CheckoutPage() {
     subtotalAfterGigCompletion = subtotalAfterCoupon
   }
 
-  // Apply Qoyns discount to subtotal (after coupon and gig completion discount)
+  // Qoyns discount amount (applied on order total = subtotal + delivery)
   let qoynsDiscountAmount = 0
-  let subtotalAfterDiscounts = subtotalAfterGigCompletion
   if (appliedDiscount && appliedDiscount.discountAmount) {
     qoynsDiscountAmount = appliedDiscount.discountAmount
-    // Apply Qoyns discount to subtotal after gig completion discount
-    subtotalAfterDiscounts = subtotalAfterGigCompletion - qoynsDiscountAmount
-    // Ensure subtotal doesn't go negative
-    if (subtotalAfterDiscounts < 0) {
-      subtotalAfterDiscounts = 0
-    }
   }
 
-  // VAT Calculation - use product VAT percentage or default to 5%
-  const getVatRate = () => {
-    if (cartItems.length === 0) return 0.05; // Default 5%
-    
-    // Get VAT percentage from the first item (assuming all items have same VAT rate)
-    const firstItem = cartItems[0];
-    const vatPercentage = firstItem.vat_percentage || 5; // Default to 5% if not provided
-    return vatPercentage / 100; // Convert percentage to decimal
-  }
-  
-  const vatRate = getVatRate();
-  // Calculate VAT on original subtotal (always, not on discounted amount)
-  const vatAmount = originalSubtotal * vatRate;
   // Get shipping cost from selected shipping method (from Jibly API)
   const shippingCost = selectedShippingMethod?.cost || selectedShippingMethod?.shippingMethodCost || 9; // Default to 9 if no method selected
+
+  // Order Total = Subtotal + Delivery (before Qoyns)
+  const orderTotalBeforeQoyns = subtotalAfterGigCompletion + shippingCost;
+  // Apply Qoyns discount on order total (subtotal + delivery)
+  const orderTotalAfterQoyns = Math.max(0, orderTotalBeforeQoyns - qoynsDiscountAmount);
   
-  // Calculate order total before cash wallet
-  // VAT is always on original subtotal, but discounts are still applied to subtotal
-  const orderTotalBeforeCashWallet = subtotalAfterDiscounts + vatAmount + shippingCost;
-  
-  // Apply Cash Wallet discount on ORDER TOTAL (1 AED = 1 AED discount) - Only for influencer role
+  // Apply Cash Wallet discount on ORDER TOTAL after Qoyns (1 AED = 1 AED discount) - Only for influencer role
   let cashWalletDiscountAmount = 0
-  let finalTotal = orderTotalBeforeCashWallet
+  let finalTotal = orderTotalAfterQoyns
   if (userRole === 'influencer' && useCashWallet && redeemableCashAed > 0) {
-    // Use the minimum of cash balance or order total
-    cashWalletDiscountAmount = Math.min(redeemableCashAed, orderTotalBeforeCashWallet)
-    finalTotal = orderTotalBeforeCashWallet - cashWalletDiscountAmount
+    cashWalletDiscountAmount = Math.min(redeemableCashAed, orderTotalAfterQoyns)
+    finalTotal = orderTotalAfterQoyns - cashWalletDiscountAmount
     if (finalTotal < 0) {
       finalTotal = 0
     }
@@ -615,8 +640,8 @@ export default function CheckoutPage() {
   // Use the calculated final total
   const actualTotal = finalTotal;
   
-  // For display purposes
-  const subtotal = subtotalAfterDiscounts;
+  // For display and API purposes (subtotal sent to backend = products total after coupon/gig, before qoyns)
+  const subtotal = subtotalAfterGigCompletion;
   // Combined discounts (coupon + gig completion + qoyns) — shown inline in Subtotal
   const totalDiscounts = couponDiscountAmount + gigCompletionDiscountAmount + qoynsDiscountAmount;
 
@@ -634,6 +659,9 @@ export default function CheckoutPage() {
 
       // Load addresses
       dispatch(fetchUserAddresses())
+      
+      // Load countries for address form
+      dispatch(fetchCountries())
       
       // Load coupons
       dispatch(fetchAcceptedPurchaseGigs())
@@ -687,6 +715,57 @@ export default function CheckoutPage() {
     }
   }, [subtotalAfterGigCompletion, cartItems.length, dispatch])
 
+  // When validation says Qoyns are no longer eligible (e.g. order below 100 after applying sales gig),
+  // remove applied Qoyns so the UI and totals stay correct.
+  useEffect(() => {
+    if (appliedDiscount?.type !== 'qoyn') return
+    const noLongerEligible = !qoynValidation.eligibleForDiscount || (qoynValidation.currentDiscountQoyn != null && qoynValidation.currentDiscountQoyn <= 0)
+    if (noLongerEligible && !qoynValidation.isValidationLoading) {
+      setAppliedDiscount(null)
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('pendingQoynRedemption')
+      }
+      showToast('Qoyns removed — order total is below the minimum (e.g. 100 AED) after applying the discount.', 'info')
+    }
+  }, [qoynValidation.eligibleForDiscount, qoynValidation.currentDiscountQoyn, qoynValidation.isValidationLoading, appliedDiscount?.type])
+
+  // Reset country/state/city selections and autocomplete when address form is closed
+  useEffect(() => {
+    if (!showAddressForm && !showShippingForm) {
+      setSelectedCountry('')
+      setSelectedState('')
+      setSelectedCity('')
+      // Clear autocomplete instance when form closes
+      if (autocompleteInstanceRef.current) {
+        window.google?.maps?.event?.clearInstanceListeners(autocompleteInstanceRef.current)
+        if (autocompleteInstanceRef.current._observer) {
+          autocompleteInstanceRef.current._observer.disconnect()
+        }
+        autocompleteInstanceRef.current = null
+      }
+      // Remove any pac-containers
+      const pacContainers = document.querySelectorAll('.pac-container')
+      pacContainers.forEach(container => container.remove())
+    }
+  }, [showAddressForm, showShippingForm])
+
+  // Fetch cities when country is selected
+  useEffect(() => {
+    if (selectedCountry) {
+      dispatch(fetchCitiesByCountry(selectedCountry))
+      setSelectedCity('') // Reset city when country changes
+      setSelectedState('') // Reset zone when country changes
+    }
+  }, [selectedCountry, dispatch])
+
+  // Fetch zones when city is selected
+  useEffect(() => {
+    if (selectedCity) {
+      dispatch(fetchZonesByCity(selectedCity))
+      setSelectedState('') // Reset zone when city changes
+    }
+  }, [selectedCity, dispatch])
+
   // Auto-populate address form with user data when form is shown
   useEffect(() => {
     if (showAddressForm && user) {
@@ -698,11 +777,323 @@ export default function CheckoutPage() {
     }
   }, [showAddressForm, user, dispatch])
 
-  // Load Google Maps API when "Use Current Location" is needed (for reverse geocoding only)
+  // Load cities when form opens if country is already selected
   useEffect(() => {
-    // Only load if user clicks "Use Current Location" - not for autocomplete
-    // This prevents Google API errors when just opening the address form
-  }, [])
+    if ((showAddressForm || showShippingForm) && selectedCountry) {
+      dispatch(fetchCitiesByCountry(selectedCountry))
+    }
+  }, [showAddressForm, showShippingForm, selectedCountry, dispatch])
+
+  // Initialize Google Maps API and Places Autocomplete - runs once when form is shown
+  useEffect(() => {
+    let isMounted = true
+    let observer = null
+
+    const initializeAutocomplete = async () => {
+      // Only initialize if form is shown
+      if (!showAddressForm || !GOOGLE_API_KEY) {
+        return
+      }
+
+      try {
+        // Load Google Maps API if not already loaded
+        if (!googleMapsLoaded) {
+          await loadGoogleMaps()
+          if (!isMounted) return
+          setGoogleMapsLoaded(true)
+        }
+
+        // Verify Google Maps is loaded
+        if (!window.google || !window.google.maps || !window.google.maps.places) {
+          return
+        }
+
+        // Get the input element
+        const addressInput = document.getElementById('address-line-1-autocomplete')
+        if (!addressInput) {
+          return
+        }
+
+        // If autocomplete already exists, just update the country restriction
+        if (autocompleteInstanceRef.current) {
+          // Update component restrictions if country changed
+          if (selectedCountry) {
+            const countryCode = getCountryCode(selectedCountry)
+            if (countryCode) {
+              autocompleteInstanceRef.current.setComponentRestrictions({ country: countryCode })
+            } else {
+              autocompleteInstanceRef.current.setComponentRestrictions({})
+            }
+          } else {
+            autocompleteInstanceRef.current.setComponentRestrictions({})
+          }
+          return
+        }
+
+        // Clean up any existing pac-containers before creating new instance
+        const existingPacContainers = document.querySelectorAll('.pac-container')
+        existingPacContainers.forEach(container => container.remove())
+
+        // Prepare autocomplete options
+        const autocompleteOptions = {
+          types: ['geocode'],
+          fields: ['address_components', 'formatted_address', 'geometry', 'name', 'types']
+        }
+
+        // Add country restriction if country is selected
+        if (selectedCountry) {
+          const countryCode = getCountryCode(selectedCountry)
+          if (countryCode) {
+            autocompleteOptions.componentRestrictions = { country: countryCode }
+          }
+        }
+
+        // Create autocomplete instance
+        const autocomplete = new window.google.maps.places.Autocomplete(addressInput, autocompleteOptions)
+        autocompleteInstanceRef.current = autocomplete
+
+        // Optimized styling function - remove duplicates and style
+        const styleAutocompleteDropdown = () => {
+          const pacContainers = document.querySelectorAll('.pac-container')
+          // Remove all but the last container (most recent one)
+          if (pacContainers.length > 1) {
+            for (let i = 0; i < pacContainers.length - 1; i++) {
+              pacContainers[i].remove()
+            }
+          }
+          // Style the remaining container
+          const pacContainer = document.querySelector('.pac-container')
+          if (pacContainer) {
+            pacContainer.style.zIndex = '10000'
+            pacContainer.style.borderRadius = '8px'
+            pacContainer.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)'
+            pacContainer.style.marginTop = '4px'
+            pacContainer.style.maxHeight = '300px'
+            pacContainer.style.overflowY = 'auto'
+          }
+        }
+
+        // Use a more efficient MutationObserver - only watch for pac-container additions
+        observer = new MutationObserver((mutations) => {
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (node.nodeType === 1) {
+                if (node.classList?.contains('pac-container')) {
+                  styleAutocompleteDropdown()
+                  break
+                } else if (node.querySelector?.('.pac-container')) {
+                  styleAutocompleteDropdown()
+                  break
+                }
+              }
+            }
+          }
+        })
+        
+        // Only observe the input's parent container, not the entire body
+        const inputContainer = addressInput.closest('div') || document.body
+        observer.observe(inputContainer, {
+          childList: true,
+          subtree: true
+        })
+
+        // Store observer for cleanup
+        autocomplete._observer = observer
+
+        // Style dropdown when it opens (debounced)
+        let styleTimeout = null
+        const debouncedStyle = () => {
+          clearTimeout(styleTimeout)
+          styleTimeout = setTimeout(styleAutocompleteDropdown, 10)
+        }
+
+        addressInput.addEventListener('focus', debouncedStyle)
+        addressInput.addEventListener('input', debouncedStyle)
+
+        // Handle place selection
+        autocomplete.addListener('place_changed', () => {
+          const place = autocomplete.getPlace()
+          
+          if (!place.geometry || !place.geometry.location) {
+            return
+          }
+
+          // Extract address components
+          const addressComponents = place.address_components || []
+          let streetNumber = ''
+          let route = ''
+          let city = ''
+          let state = ''
+          let postalCode = ''
+          let country = ''
+
+          addressComponents.forEach(component => {
+            const types = component.types
+            if (types.includes('street_number')) {
+              streetNumber = component.long_name
+            } else if (types.includes('route')) {
+              route = component.long_name
+            } else if (types.includes('locality') || types.includes('administrative_area_level_2')) {
+              city = component.long_name
+            } else if (types.includes('administrative_area_level_1')) {
+              state = component.long_name
+            } else if (types.includes('postal_code')) {
+              postalCode = component.long_name
+            } else if (types.includes('country')) {
+              country = component.long_name
+            }
+          })
+
+          // Use place name for establishments, otherwise use formatted address
+          const addressLine1 = place.name && place.types?.includes('establishment') 
+            ? `${place.name}, ${place.formatted_address}`
+            : place.formatted_address || [streetNumber, route].filter(Boolean).join(' ')
+
+          // Get latitude and longitude
+          const latitude = place.geometry.location.lat()
+          const longitude = place.geometry.location.lng()
+
+          // Log coordinates for debugging
+          console.log('📍 Selected place coordinates:', { latitude, longitude, placeName: place.name || addressLine1 })
+          console.log('📍 Extracted address components:', { city, state, country, postalCode })
+
+          // Update form with extracted data including coordinates
+          dispatch(updateAddressForm({
+            addressLine1: addressLine1,
+            ...(city && { city: city }),
+            ...(state && { state: state }),
+            ...(postalCode && { postalCode: postalCode }),
+            ...(country && { country: country }),
+            latitude: latitude,
+            longitude: longitude
+          }))
+
+          // Clear errors for fields that are auto-populated from autocomplete
+          setAddressFieldErrors(prev => {
+            const updated = { ...prev }
+            if (addressLine1) updated.addressLine1 = false
+            if (postalCode) updated.postalCode = false
+            return updated
+          })
+
+          // Step 1: Auto-fill country if found
+          if (country) {
+            const currentCountries = apiCountries || []
+            // Try exact match first
+            let countryMatch = currentCountries.find(c => c.toLowerCase() === country.toLowerCase())
+            // If no exact match, try partial match (e.g., "United Arab Emirates" matches "UAE")
+            if (!countryMatch) {
+              countryMatch = currentCountries.find(c => {
+                const cLower = c.toLowerCase()
+                const countryLower = country.toLowerCase()
+                return cLower.includes(countryLower) || countryLower.includes(cLower) ||
+                       (country === 'UAE' && cLower.includes('united arab')) ||
+                       (country === 'United Arab Emirates' && cLower.includes('uae'))
+              })
+            }
+            
+            if (countryMatch) {
+              console.log('✅ Auto-filling country:', countryMatch)
+              setSelectedCountry(countryMatch)
+              dispatch(updateAddressForm({ country: countryMatch }))
+              setAddressFieldErrors(prev => ({ ...prev, country: false }))
+              
+              // Explicitly fetch cities when country is auto-filled
+              dispatch(fetchCitiesByCountry(countryMatch))
+              
+              // Step 2: After country is set, wait for cities to load, then auto-fill city
+              // Store the city value to match later
+              const cityToMatch = city
+              
+              // Function to try matching city after cities are loaded
+              const tryMatchCity = (attempt = 0) => {
+                if (attempt > 10) return // Max 10 attempts (3 seconds)
+                
+                // Use citiesZonesRef to get the latest cities data (always objects with { name: string })
+                const currentCities = citiesZonesRef.current.cities || []
+                if (currentCities.length > 0 && cityToMatch) {
+                  // Cities are loaded, try to match
+                  const cityMatch = currentCities.find(c => {
+                    // citiesZonesRef.current.cities is always array of objects: [{ name: "Dubai" }, ...]
+                    const cName = c?.name || c
+                    return cName && (
+                      cName.toLowerCase() === cityToMatch.toLowerCase() ||
+                      cName.toLowerCase().includes(cityToMatch.toLowerCase()) ||
+                      cityToMatch.toLowerCase().includes(cName.toLowerCase())
+                    )
+                  })
+                  
+                  if (cityMatch) {
+                    // Extract city name from object
+                    const cityName = cityMatch?.name || cityMatch
+                    console.log('✅ Auto-filling city:', cityName)
+                    setSelectedCity(cityName)
+                    setAddressFieldErrors(prev => ({ ...prev, city: false }))
+                    // Note: Zone/area is not auto-filled - user must select manually
+                  } else {
+                    // City not found, try again after a delay
+                    setTimeout(() => tryMatchCity(attempt + 1), 300)
+                  }
+                } else {
+                  // Cities not loaded yet, try again
+                  setTimeout(() => tryMatchCity(attempt + 1), 300)
+                }
+              }
+              
+              // Start trying to match city after a short delay
+              setTimeout(() => tryMatchCity(), 300)
+            } else {
+              console.warn('⚠️ Country not found in list:', country, 'Available:', currentCountries)
+            }
+          }
+        })
+      } catch (error) {
+        console.error('Error initializing Google Places Autocomplete:', error)
+      }
+    }
+
+    // Initialize with minimal delay
+    const timeoutId = setTimeout(() => {
+      initializeAutocomplete()
+    }, 0)
+
+    // Cleanup function - only runs on unmount or when form closes
+    return () => {
+      isMounted = false
+      clearTimeout(timeoutId)
+      if (autocompleteInstanceRef.current) {
+        window.google?.maps?.event?.clearInstanceListeners(autocompleteInstanceRef.current)
+        // Disconnect observer if it exists
+        if (autocompleteInstanceRef.current._observer) {
+          autocompleteInstanceRef.current._observer.disconnect()
+        }
+        autocompleteInstanceRef.current = null
+      }
+      // Clean up observer if it exists
+      if (observer) {
+        observer.disconnect()
+      }
+      // Remove any pac-containers when form closes
+      const pacContainers = document.querySelectorAll('.pac-container')
+      pacContainers.forEach(container => container.remove())
+    }
+  }, [showAddressForm, GOOGLE_API_KEY, googleMapsLoaded]) // Removed selectedCountry from dependencies
+
+  // Update country restrictions when country changes - separate effect for better performance
+  useEffect(() => {
+    if (autocompleteInstanceRef.current && window.google?.maps?.places) {
+      if (selectedCountry) {
+        const countryCode = getCountryCode(selectedCountry)
+        if (countryCode) {
+          autocompleteInstanceRef.current.setComponentRestrictions({ country: countryCode })
+        } else {
+          autocompleteInstanceRef.current.setComponentRestrictions({})
+        }
+      } else {
+        autocompleteInstanceRef.current.setComponentRestrictions({})
+      }
+    }
+  }, [selectedCountry])
 
   // Ensure a selected address when addresses are available (prefer default)
   useEffect(() => {
@@ -712,51 +1103,33 @@ export default function CheckoutPage() {
     }
   }, [displayAddresses, selectedAddress, dispatch])
 
-  // Fetch shipping methods when address is selected
+  // Fetch shipping methods when address is selected (via slice)
   useEffect(() => {
-    const fetchShippingMethods = async () => {
-      if (!selectedAddress || !selectedAddress.latitude || !selectedAddress.longitude) {
-        setShippingMethods([])
-        setSelectedShippingMethod(null)
-        return
-      }
+    if (!selectedAddress || !selectedAddress.latitude || !selectedAddress.longitude) {
+      setShippingMethods([])
+      setSelectedShippingMethod(null)
+      return
+    }
 
-      setLoadingShippingMethods(true)
-      try {
-        const { delivery } = await import('@/store/api/endpoints')
-        const params = new URLSearchParams({
-          latitude: selectedAddress.latitude.toString(),
-          longitude: selectedAddress.longitude.toString(),
-          ...(selectedAddress.city && { city: selectedAddress.city }),
-          ...(selectedAddress.state && { state: selectedAddress.state }),
-          ...(selectedAddress.country && { country: selectedAddress.country }),
-          ...(selectedAddress.postalCode && { postalCode: selectedAddress.postalCode })
-        })
-
-        const token = await getAuthToken()
-        const response = await fetch(`${delivery.getShippingMethods}?${params.toString()}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch shipping methods')
-        }
-
-        const data = await response.json()
-        const methods = data.data?.shippingMethods || []
-        setShippingMethods(methods)
-
-        // Auto-select first method if available
-        if (methods.length > 0 && !selectedShippingMethod) {
+    setLoadingShippingMethods(true)
+    dispatch(fetchShippingMethods({
+      latitude: selectedAddress.latitude,
+      longitude: selectedAddress.longitude,
+      city: selectedAddress.city,
+      state: selectedAddress.state,
+      country: selectedAddress.country,
+      postalCode: selectedAddress.postalCode
+    }))
+      .unwrap()
+      .then((methods) => {
+        setShippingMethods(methods || [])
+        if ((methods || []).length > 0 && !selectedShippingMethod) {
           setSelectedShippingMethod(methods[0])
         }
-      } catch (error) {
+      })
+      .catch((error) => {
         console.error('Error fetching shipping methods:', error)
         showToast('Failed to load shipping methods', 'error')
-        // Fallback to default shipping method
         setShippingMethods([{
           id: 'standard',
           name: 'Standard',
@@ -769,12 +1142,10 @@ export default function CheckoutPage() {
           deliveryTime: '3 - 5 Days',
           cost: 9
         })
-      } finally {
+      })
+      .finally(() => {
         setLoadingShippingMethods(false)
-      }
-    }
-
-    fetchShippingMethods()
+      })
   }, [selectedAddress, showToast])
   
   // Clear validation error when address is selected
@@ -839,9 +1210,96 @@ export default function CheckoutPage() {
     }
   }, [selectedPaymentMethod, selectedAddress, cartItems.length, stripeClientSecret, isCreatingPaymentIntent, paymentIntentError])
 
+  // Use API countries (convert array of strings to array of objects for compatibility)
+  const countries = (apiCountries || []).map(countryName => ({ name: countryName, isoCode: countryName }))
+  
+  // Use API cities (convert array of strings to array of objects for compatibility)
+  const cities = (apiCities || []).map(cityName => ({ name: cityName }))
+  
+  // Use API zones (convert to array of objects with name property)
+  const zones = (apiZones || []).map(zone => ({ name: zone.zoneName, id: zone.id }))
+
+  // Keep refs updated with latest cities and zones for use in autocomplete handler
+  useEffect(() => {
+    citiesZonesRef.current = { cities, zones }
+  }, [cities, zones])
+  
+  // Check if we should show zones dropdown (when city is selected)
+  const shouldShowZonesDropdown = selectedCity && zones.length > 0
+
   // Address form handlers
   const handleAddressFormChange = (field, value) => {
     dispatch(updateAddressForm({ [field]: value }))
+    // Clear custom label when type is changed to home/work/other
+    if (field === 'type' && (value === 'home' || value === 'work' || value === 'other')) {
+      setCustomLabel('')
+    }
+  }
+
+  // Handle custom label change
+  const handleCustomLabelChange = (e) => {
+    const value = e.target.value
+    setCustomLabel(value)
+    if (value) {
+      dispatch(updateAddressForm({ type: 'custom' }))
+    } else {
+      // If custom label is cleared, revert to 'home'
+      dispatch(updateAddressForm({ type: 'home' }))
+    }
+  }
+
+  // Get the display value for the label input
+  const getLabelValue = () => {
+    if (customLabel) return customLabel
+    if (addressForm.type === 'home') return 'Home'
+    if (addressForm.type === 'work') return 'Work'
+    if (addressForm.type === 'other') return 'Other'
+    return ''
+  }
+
+  // Handle country change
+  const handleCountryChange = (e) => {
+    const countryName = e.target.value
+    setSelectedCountry(countryName)
+    setSelectedCity('') // Reset city when country changes
+    setSelectedState('') // Reset zone when country changes
+    
+    // Clear country error when country is selected
+    if (addressFieldErrors.country) {
+      setAddressFieldErrors(prev => ({ ...prev, country: false }))
+    }
+    
+    // Explicitly fetch cities when country is selected
+    if (countryName) {
+      dispatch(fetchCitiesByCountry(countryName))
+    }
+    
+    dispatch(updateAddressForm({ country: countryName }))
+  }
+
+  const handleCityChange = (e) => {
+    const cityName = e.target.value
+    setSelectedCity(cityName)
+    setSelectedState('') // Reset zone when city changes
+    
+    // Clear city error when city is selected
+    if (addressFieldErrors.city) {
+      setAddressFieldErrors(prev => ({ ...prev, city: false }))
+    }
+    
+    dispatch(updateAddressForm({ city: cityName }))
+  }
+
+  const handleZoneChange = (e) => {
+    const zoneName = e.target.value
+    setSelectedState(zoneName)
+    
+    // Clear state error when state is selected
+    if (addressFieldErrors.state) {
+      setAddressFieldErrors(prev => ({ ...prev, state: false }))
+    }
+    
+    dispatch(updateAddressForm({ state: zoneName }))
   }
 
   // Handle "Use Current Location" button click
@@ -927,26 +1385,139 @@ export default function CheckoutPage() {
   const handleAddressSubmit = async (e) => {
     e.preventDefault()
     
+    // Validate all required fields and set error states
+    const errors = {}
+    
+    if (!addressForm.fullName || addressForm.fullName.trim() === '') {
+      errors.fullName = true
+    }
+    if (!addressForm.phone || addressForm.phone.trim() === '') {
+      errors.phone = true
+    }
+    if (!addressForm.email || addressForm.email.trim() === '') {
+      errors.email = true
+    }
+    if (!selectedCountry) {
+      errors.country = true
+    }
+    if (!selectedCity) {
+      errors.city = true
+    }
+    if (!selectedState) {
+      errors.state = true
+    }
+    if (!addressForm.postalCode || addressForm.postalCode.trim() === '') {
+      errors.postalCode = true
+    }
+    if (!addressForm.addressLine1 || addressForm.addressLine1.trim() === '') {
+      errors.addressLine1 = true
+    }
+    
+    // If there are errors, mark ALL required fields as having errors (turn all red)
+    if (Object.keys(errors).length > 0) {
+      // Set all required fields to show error state
+      setAddressFieldErrors({
+        fullName: !addressForm.fullName || addressForm.fullName.trim() === '',
+        phone: !addressForm.phone || addressForm.phone.trim() === '',
+        email: !addressForm.email || addressForm.email.trim() === '',
+        country: !selectedCountry,
+        city: !selectedCity,
+        state: !selectedState,
+        postalCode: !addressForm.postalCode || addressForm.postalCode.trim() === '',
+        addressLine1: !addressForm.addressLine1 || addressForm.addressLine1.trim() === ''
+      })
+      showToast('Please fill in all required fields', 'error')
+      return
+    }
+    
+    // Clear errors if validation passes
+    setAddressFieldErrors({})
+    
     try {
       // Get coordinates from address
-      const coordinates = await getCoordinatesFromAddress(addressForm)
+      const coordinates = await getCoordinatesFromAddress({
+        ...addressForm,
+        country: selectedCountry,
+        city: selectedCity,
+        state: selectedState
+      })
       
       // Prepare address data with coordinates (only if coordinates exist)
+      // IMPORTANT: Use selectedCity and selectedState directly to avoid any swap issues
+      // Don't rely on addressForm.city or addressForm.state as they might be swapped from Google Places
+      // Explicitly build addressData to ensure city and state are NOT swapped
       const addressData = {
-        ...addressForm
+        type: addressForm.type || 'home',
+        fullName: addressForm.fullName || '',
+        phone: addressForm.phone || '',
+        email: addressForm.email || '',
+        addressLine1: addressForm.addressLine1 || '',
+        addressLine2: addressForm.addressLine2 || '',
+        landmark: addressForm.landmark || '',
+        instructions: addressForm.instructions || '',
+        postalCode: addressForm.postalCode || '',
+        country: selectedCountry,
+        // IMPORTANT: API expects swapped values - selectedState goes to city field, selectedCity goes to state field
+        city: selectedState, // API city field gets the zone/state dropdown value
+        state: selectedCity, // API state field gets the city dropdown value
+        isDefault: addressForm.isDefault || false
       }
       
-      // Only add coordinates if they exist
-      if (coordinates && coordinates.latitude && coordinates.longitude) {
+      // Debug log to verify city and state are correct before submission
+      console.log('📍 [CHECKOUT ADDRESS SUBMISSION] City/State values (SWAPPED for API):', {
+        selectedCity: selectedCity,
+        selectedState: selectedState,
+        apiCity: addressData.city, // This is selectedState (zone)
+        apiState: addressData.state, // This is selectedCity (city)
+        note: 'API expects: city=zone, state=city'
+      })
+      
+      // FINAL SAFEGUARD: Explicitly ensure city and state are swapped for API
+      // API expects: city field = zone/state dropdown value, state field = city dropdown value
+      addressData.city = selectedState
+      addressData.state = selectedCity
+      
+      console.log('📍 [CHECKOUT ADDRESS SUBMISSION] City/State values AFTER final fix:', {
+        selectedCity: selectedCity,
+        selectedState: selectedState,
+        addressDataCity: addressData.city,
+        addressDataState: addressData.state
+      })
+      
+      // Only add coordinates if they exist (prefer form coordinates from autocomplete, fallback to geocoded)
+      if (addressForm.latitude && addressForm.longitude) {
+        addressData.latitude = addressForm.latitude
+        addressData.longitude = addressForm.longitude
+        console.log('✅ Saving address with coordinates from autocomplete:', { 
+          latitude: addressForm.latitude, 
+          longitude: addressForm.longitude 
+        })
+      } else if (coordinates && coordinates.latitude && coordinates.longitude) {
         addressData.latitude = coordinates.latitude
         addressData.longitude = coordinates.longitude
+        console.log('✅ Saving address with coordinates from geocoding:', { 
+          latitude: coordinates.latitude, 
+          longitude: coordinates.longitude 
+        })
+      } else {
+        console.warn('⚠️ No coordinates available for address')
       }
 
+      console.log('📤 [FINAL PAYLOAD] Sending address data to API:', JSON.stringify(addressData, null, 2))
       const result = await dispatch(createAddress(addressData))
 
       // Refetch addresses to ensure we have the latest data
       if (createAddress.fulfilled.match(result)) {
         await dispatch(fetchUserAddresses())
+        // Close the form and reset selections
+        dispatch(setShowAddressForm(false))
+        dispatch(setShowShippingForm(false))
+        setSelectedCountry('')
+        setSelectedState('')
+        setSelectedCity('')
+        setCustomLabel('') // Reset custom label
+        setAddressFieldErrors({}) // Clear all field errors on success
+        showToast('Address saved successfully!', 'success')
       }
     } catch (error) {
       console.error('Error submitting address:', error)
@@ -990,7 +1561,6 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod,
       total: actualTotal,
       subtotal: subtotal,
-      vat: vatAmount,
       shipping: shippingCost,
       discount: qoynsDiscountAmount + couponDiscountAmount + gigCompletionDiscountAmount + cashWalletDiscountAmount,
       couponCode: appliedCoupon ? appliedCoupon.discountCode : (appliedGigCompletion ? appliedGigCompletion.discountCode : null),
@@ -1024,7 +1594,6 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod,
       total: actualTotal,
       subtotal: subtotal,
-      vat: vatAmount,
       shipping: shippingCost,
       discount: qoynsDiscountAmount + couponDiscountAmount + gigCompletionDiscountAmount + cashWalletDiscountAmount,
       couponCode: appliedCoupon ? appliedCoupon.discountCode : (appliedGigCompletion ? appliedGigCompletion.discountCode : null),
@@ -1129,17 +1698,26 @@ export default function CheckoutPage() {
 
       const body = {
         items: cartItems.map(item => {
-          return {
+          const base = {
             productId: item.productId || item.id,
             name: item.name || 'Product',
             quantity: item.quantity || 1,
             price: item.price || 0,
             image: item.image || undefined
           }
+          // Attach sales gig discount per item for order record (discount name and % or amount)
+          if (hasGigCompletionDiscount(item)) {
+            base.discountName = getProductDiscountCode(item) || undefined
+            base.discountPercentage = (appliedGigCompletion?.customerDiscountPercentage > 0)
+              ? appliedGigCompletion.customerDiscountPercentage
+              : undefined
+            const fixedAmt = getProductDiscountAmount(item)
+            base.discountAmount = fixedAmt > 0 ? fixedAmt : undefined
+          }
+          return base
         }),
         total: actualTotal,
         subtotal: subtotal,
-        vat: vatAmount,
         discount: qoynsDiscountAmount + couponDiscountAmount + gigCompletionDiscountAmount + cashWalletDiscountAmount,
         discountType: finalDiscountType,
         // Qoyns discount information
@@ -1153,11 +1731,17 @@ export default function CheckoutPage() {
         gigCompletionDiscountAmount: appliedGigCompletion ? gigCompletionDiscountAmount : undefined,
         gigCompletionDiscountPercentage: appliedGigCompletion ? appliedGigCompletion.customerDiscountPercentage : undefined,
         gigCompletionDiscountFixed: appliedGigCompletion ? appliedGigCompletion.customerDiscountFixed : undefined,
-        currency: 'usd',
+        currency: 'aed',
         userId: mongoUserId, // MongoDB user ID
         cognitoUserId: cognitoUserId, // Cognito user ID
         deliveryAddress: selectedAddress, // Include selected delivery address
         shippingAddress: shippingSameAsDelivery ? selectedAddress : null, // Include shipping address
+        // Shipping charge and method for payment API
+        shipping: shippingCost,
+        shippingMethod: selectedShippingMethod?.id || selectedShippingMethod?.methodId,
+        shippingMethodName: selectedShippingMethod?.name || selectedShippingMethod?.methodName,
+        shippingMethodTime: selectedShippingMethod?.deliveryTime || selectedShippingMethod?.estimatedDelivery || selectedShippingMethod?.time,
+        shippingMethodCost: shippingCost,
         successUrl: `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${window.location.origin}/checkout`,
         ...(mongoUserId && { mongoUserId }) // Include MongoDB userId if available
@@ -1189,33 +1773,12 @@ export default function CheckoutPage() {
       }
 
       console.log('📤 Creating checkout session...')
-      console.log('🔗 Endpoint:', paymentEndpoints.stripeHostedCheckout)
       console.log('📦 Payload:', body)
 
-
-
-      const res = await fetch(paymentEndpoints.stripeHostedCheckout, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-      })
-
-      console.log('📥 Response status:', res.status)
-
-      if (!res.ok) {
-        const text = await res.text()
-        console.error('❌ API Error:', text)
-        alert(`Checkout failed: ${text.substring(0, 100)}`)
-        throw new Error(text)
-      }
-
-      const { data } = await res.json()
+      const data = await dispatch(createStripeHostedCheckoutSession(body)).unwrap()
       console.log('✅ Session created:', data)
 
-      if (!data.sessionId) {
+      if (!data?.sessionId) {
         console.error('❌ No session ID in response')
         alert('Checkout session creation failed. Please try again.')
         return
@@ -1267,19 +1830,29 @@ export default function CheckoutPage() {
         return
       }
 
-      // Build checkout payload
+      // Build checkout payload for cash-wallet API (include per-item sales gig discount for order record)
       const checkoutPayload = {
-        items: cartItems.map(item => ({
-          productId: item.productId || item.id,
-          name: item.name || 'Product',
-          price: item.price || 0,
-          quantity: item.quantity || 1,
-          image: item.image || null
-        })),
+        items: cartItems.map(item => {
+          const base = {
+            productId: (item.productId || item.id)?.toString?.() || item.productId || item.id,
+            name: item.name || 'Product',
+            price: Number(item.price) || 0,
+            quantity: Number(item.quantity) || 1,
+            image: item.image || null
+          }
+          if (hasGigCompletionDiscount(item)) {
+            base.discountName = getProductDiscountCode(item) || undefined
+            base.discountPercentage = (appliedGigCompletion?.customerDiscountPercentage > 0)
+              ? appliedGigCompletion.customerDiscountPercentage
+              : undefined
+            const fixedAmt = getProductDiscountAmount(item)
+            base.discountAmount = fixedAmt > 0 ? fixedAmt : undefined
+          }
+          return base
+        }),
         currency: 'usd',
-        total: actualTotal,
-        subtotal: originalSubtotal,
-        vat: vatAmount,
+        total: Number(actualTotal),
+        subtotal: Number(originalSubtotal),
         discount: qoynsDiscountAmount + couponDiscountAmount + cashWalletDiscountAmount,
         cashWalletAmount: cashWalletDiscountAmount,
         qoynsDiscountAmount: qoynsDiscountAmount,
@@ -1295,69 +1868,29 @@ export default function CheckoutPage() {
           phone: selectedAddress.phone,
           email: selectedAddress.email
         },
-        shippingAddress: shippingSameAsDelivery ? {
-          fullName: selectedAddress.fullName,
-          addressLine1: selectedAddress.addressLine1,
-          city: selectedAddress.city,
-          state: selectedAddress.state,
-          postalCode: selectedAddress.postalCode,
-          country: selectedAddress.country,
-          phone: selectedAddress.phone,
-          email: selectedAddress.email
-        } : null,
-        shippingMethod: selectedShippingMethod?.id || selectedShippingMethod?.methodId || 'standard',
+        shipping: Number(shippingCost),
+        shippingMethod: (selectedShippingMethod?.id || selectedShippingMethod?.methodId || 'standard').toString(),
         shippingMethodName: selectedShippingMethod?.name || selectedShippingMethod?.methodName || 'Standard Delivery',
-        shippingMethodTime: selectedShippingMethod?.deliveryTime || selectedShippingMethod?.estimatedDelivery || selectedShippingMethod?.time,
-        shippingMethodCost: shippingCost,
-        shippingCost: shippingCost
+        shippingMethodCost: Number(shippingCost)
       }
 
       console.log('📡 [CASH WALLET PAYMENT] Calling checkout API:', checkoutPayload)
-      
-      const response = await fetch(paymentEndpoints.cashWalletCheckout, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(checkoutPayload)
-      })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ [CASH WALLET PAYMENT] Failed:', response.status, errorText)
-        try {
-          const errorData = JSON.parse(errorText)
-          showToast(errorData.message || 'Failed to process cash wallet payment.', 'error')
-        } catch {
-          showToast('Failed to process cash wallet payment. Please try again.', 'error')
-        }
+      let result
+      try {
+        result = await dispatch(createCashWalletCheckout(checkoutPayload)).unwrap()
+        console.log('✅ [CASH WALLET PAYMENT] Success:', result)
+      } catch (err) {
+        console.error('❌ [CASH WALLET PAYMENT] Failed:', err)
+        showToast(err?.message || 'Failed to process cash wallet payment. Please try again.', 'error')
         return
       }
 
-      const result = await response.json()
-      console.log('✅ [CASH WALLET PAYMENT] Success:', result)
-
-      // Redeem cash wallet amount after successful order
+      // Redeem cash wallet amount after successful order (via slice)
       try {
         console.log('💸 [CASH WALLET REDEEM] Calling redeem API for amount:', cashWalletDiscountAmount)
-        const redeemResponse = await fetch('https://backendwallet.qliq.ae/api/wallet/cash/redeem', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            amountInAed: cashWalletDiscountAmount.toFixed(2)
-          })
-        })
-        
-        if (redeemResponse.ok) {
-          const redeemResult = await redeemResponse.json()
-          console.log('✅ [CASH WALLET REDEEM] Success:', redeemResult)
-        } else {
-          console.error('❌ [CASH WALLET REDEEM] Failed:', redeemResponse.status)
-        }
+        await dispatch(redeemCash({ amountInAed: cashWalletDiscountAmount.toFixed(2) })).unwrap()
+        console.log('✅ [CASH WALLET REDEEM] Success')
       } catch (redeemError) {
         console.error('❌ [CASH WALLET REDEEM] Error:', redeemError)
       }
@@ -1371,11 +1904,9 @@ export default function CheckoutPage() {
       // Show success toast briefly then redirect
       showToast('Payment successful with Cash Wallet!', 'success')
       
-      // Use router.push for proper Next.js navigation
-      const orderId = result.data?.order?._id || result.data?.orderId || ''
+      // Redirect to success page with order_id (same pattern as Stripe success redirect)
+      const orderId = (result && (result?.data?.order?._id || result?.data?.orderId || result?.order?._id || result?.orderId)) || ''
       const redirectUrl = `/checkout/success?payment_method=cash_wallet${orderId ? `&order_id=${orderId}` : ''}`
-      
-      // Small delay to allow toast to show, then redirect
       setTimeout(() => {
         window.location.replace(redirectUrl)
       }, 500)
@@ -1658,14 +2189,11 @@ export default function CheckoutPage() {
               <div className={styles.walletExpiry}>
                 {(() => {
                   const daysRemaining = calculateDaysRemaining(qoynExpiryDate)
-                  const formattedExpiryDate = formatExpiryDate(qoynExpiryDate)
                   
-                  if (daysRemaining !== null && formattedExpiryDate) {
-                    return `Expires on ${formattedExpiryDate} (${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'} remaining)`
-                  } else if (daysRemaining !== null) {
+                  if (daysRemaining !== null) {
                     return `Expires in ${daysRemaining} ${daysRemaining === 1 ? 'Day' : 'Days'}`
                   } else {
-                    return 'No expiry date available'
+                    return 'No expiry is available'
                   }
                 })()}
               </div>
@@ -1797,7 +2325,7 @@ export default function CheckoutPage() {
 
               {/* Address Form */}
               {showAddressForm && (
-                <form className={styles.addressForm} onSubmit={handleAddressSubmit}>
+                <form className={styles.addressForm} onSubmit={handleAddressSubmit} noValidate>
                   {error && (
                     <div className={styles.errorMessage}>
                       {error}
@@ -1843,83 +2371,135 @@ export default function CheckoutPage() {
                     <input
                       className={styles.addressLabelInput}
                       placeholder="Custom Label"
-                      value={addressForm.type}
-                      onChange={(e) => handleAddressFormChange('type', e.target.value)}
+                      value={getLabelValue()}
+                      onChange={handleCustomLabelChange}
                     />
                   </div>
                   <div className={styles.addressFormGrid}>
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.fullName ? styles.addressInputError : ''}`}
                       placeholder="Full Name"
                       value={addressForm.fullName}
-                      onChange={(e) => handleAddressFormChange('fullName', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('fullName', e.target.value)
+                        if (addressFieldErrors.fullName) {
+                          setAddressFieldErrors(prev => ({ ...prev, fullName: false }))
+                        }
+                      }}
                       required
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.phone ? styles.addressInputError : ''}`}
                       placeholder="Phone"
                       value={addressForm.phone}
-                      onChange={(e) => handleAddressFormChange('phone', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('phone', e.target.value)
+                        if (addressFieldErrors.phone) {
+                          setAddressFieldErrors(prev => ({ ...prev, phone: false }))
+                        }
+                      }}
                       required
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.email ? styles.addressInputError : ''}`}
                       placeholder="Email"
                       type="email"
                       value={addressForm.email}
-                      onChange={(e) => handleAddressFormChange('email', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('email', e.target.value)
+                        if (addressFieldErrors.email) {
+                          setAddressFieldErrors(prev => ({ ...prev, email: false }))
+                        }
+                      }}
                       required
                     />
                     <select
-                      className={styles.addressInput}
-                      value={addressForm.country}
-                      onChange={(e) => handleAddressFormChange('country', e.target.value)}
+                      className={`${styles.addressInput} ${addressFieldErrors.country ? styles.addressInputError : ''}`}
+                      value={selectedCountry}
+                      onChange={handleCountryChange}
                       required
+                      disabled={loadingCountries}
                     >
-                      <option value="">Country</option>
-                      <option value="AE">UAE</option>
-                      <option value="SA">Saudi Arabia</option>
-                      <option value="KW">Kuwait</option>
-                      <option value="QA">Qatar</option>
+                      <option value="">{loadingCountries ? 'Loading...' : 'Select Country'}</option>
+                      {countries.map((country) => (
+                        <option key={country.isoCode} value={country.name}>
+                          {country.name}
+                        </option>
+                      ))}
                     </select>
                     <select
-                      className={styles.addressInput}
-                      value={addressForm.state}
-                      onChange={(e) => handleAddressFormChange('state', e.target.value)}
+                      className={`${styles.addressInput} ${addressFieldErrors.city ? styles.addressInputError : ''}`}
+                      value={selectedCity}
+                      onChange={(e) => {
+                        handleCityChange(e)
+                        if (addressFieldErrors.city) {
+                          setAddressFieldErrors(prev => ({ ...prev, city: false }))
+                        }
+                      }}
+                      disabled={!selectedCountry || loadingCities}
                       required
                     >
-                      <option value="">State</option>
-                      <option value="Dubai">Dubai</option>
-                      <option value="Abu Dhabi">Abu Dhabi</option>
-                      <option value="Sharjah">Sharjah</option>
-                      <option value="Ajman">Ajman</option>
+                      <option value="">{loadingCities ? 'Loading...' : selectedCountry ? 'Select City' : 'Select Country First'}</option>
+                      {cities.map((city) => (
+                        <option key={city.name} value={city.name}>
+                          {city.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className={`${styles.addressInput} ${addressFieldErrors.state ? styles.addressInputError : ''}`}
+                      value={selectedState}
+                      onChange={(e) => {
+                        handleZoneChange(e)
+                        if (addressFieldErrors.state) {
+                          setAddressFieldErrors(prev => ({ ...prev, state: false }))
+                        }
+                      }}
+                      disabled={!selectedCity || loadingZones}
+                      required
+                    >
+                      <option value="">{loadingZones ? 'Loading...' : selectedCity ? 'Select Zone' : 'Select City First'}</option>
+                      {zones.map((zone) => (
+                        <option key={zone.id} value={zone.name}>
+                          {zone.name}
+                        </option>
+                      ))}
+                      <option value="Other">Other</option>
                     </select>
                     <input
-                      className={styles.addressInput}
-                      placeholder="City"
-                      value={addressForm.city}
-                      onChange={(e) => handleAddressFormChange('city', e.target.value)}
-                      required
-                    />
-                    <input
-                      className={styles.addressInput}
-                      placeholder="Postal Code"
-                      value={addressForm.postalCode}
-                      onChange={(e) => handleAddressFormChange('postalCode', e.target.value)}
-                      required
-                    />
-                    <input
-                      className={styles.addressInput}
-                      placeholder="Address Line 1"
+                      id="address-line-1-autocomplete"
+                      ref={addressLine1AutocompleteRef}
+                      className={`${styles.addressInput} ${addressFieldErrors.addressLine1 ? styles.addressInputError : ''}`}
+                      placeholder="Search Address (e.g., Latifa Tower)"
                       value={addressForm.addressLine1}
-                      onChange={(e) => handleAddressFormChange('addressLine1', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('addressLine1', e.target.value)
+                        if (addressFieldErrors.addressLine1) {
+                          setAddressFieldErrors(prev => ({ ...prev, addressLine1: false }))
+                        }
+                      }}
                       required
+                      autoComplete="off"
+                      style={{ gridColumn: 'span 2' }}
                     />
                     <input
                       className={styles.addressInput}
-                      placeholder="Address Line 2"
+                      placeholder="Address Line 2 (Flat Number, Building Number)"
                       value={addressForm.addressLine2}
                       onChange={(e) => handleAddressFormChange('addressLine2', e.target.value)}
+                      style={{ gridColumn: 'span 2' }}
+                    />
+                    <input
+                      className={`${styles.addressInput} ${addressFieldErrors.postalCode ? styles.addressInputError : ''}`}
+                      placeholder="Postal Code"
+                      value={addressForm.postalCode}
+                      onChange={(e) => {
+                        handleAddressFormChange('postalCode', e.target.value)
+                        if (addressFieldErrors.postalCode) {
+                          setAddressFieldErrors(prev => ({ ...prev, postalCode: false }))
+                        }
+                      }}
+                      required
                     />
                     <input
                       className={styles.addressInput}
@@ -1943,6 +2523,7 @@ export default function CheckoutPage() {
                       onClick={() => {
                         setAddressValidationError(false)
                         dispatch(setShowAddressForm(false))
+                        setCustomLabel('') // Reset custom label
                       }}
                     >
                       Cancel
@@ -1989,7 +2570,7 @@ export default function CheckoutPage() {
                 </div>
               )}
               {!shippingSameAsDelivery && showShippingForm && (
-                <form className={styles.addressForm} onSubmit={handleAddressSubmit}>
+                <form className={styles.addressForm} onSubmit={handleAddressSubmit} noValidate>
                   <div className={styles.addressFormTabs}>
                     <button
                       type="button"
@@ -2030,76 +2611,128 @@ export default function CheckoutPage() {
                     <input
                       className={styles.addressLabelInput}
                       placeholder="Custom Label"
-                      value={addressForm.type}
-                      onChange={(e) => handleAddressFormChange('type', e.target.value)}
+                      value={getLabelValue()}
+                      onChange={handleCustomLabelChange}
                     />
                   </div>
                   <div className={styles.addressFormGrid}>
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.fullName ? styles.addressInputError : ''}`}
                       placeholder="Full Name"
                       value={addressForm.fullName}
-                      onChange={(e) => handleAddressFormChange('fullName', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('fullName', e.target.value)
+                        if (addressFieldErrors.fullName) {
+                          setAddressFieldErrors(prev => ({ ...prev, fullName: false }))
+                        }
+                      }}
                       required
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.phone ? styles.addressInputError : ''}`}
                       placeholder="Phone"
                       value={addressForm.phone}
-                      onChange={(e) => handleAddressFormChange('phone', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('phone', e.target.value)
+                        if (addressFieldErrors.phone) {
+                          setAddressFieldErrors(prev => ({ ...prev, phone: false }))
+                        }
+                      }}
                       required
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.email ? styles.addressInputError : ''}`}
                       placeholder="Email"
                       type="email"
                       value={addressForm.email}
-                      onChange={(e) => handleAddressFormChange('email', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('email', e.target.value)
+                        if (addressFieldErrors.email) {
+                          setAddressFieldErrors(prev => ({ ...prev, email: false }))
+                        }
+                      }}
                       required
                     />
                     <select
-                      className={styles.addressInput}
-                      value={addressForm.country}
-                      onChange={(e) => handleAddressFormChange('country', e.target.value)}
+                      className={`${styles.addressInput} ${addressFieldErrors.country ? styles.addressInputError : ''}`}
+                      value={selectedCountry}
+                      onChange={(e) => {
+                        handleCountryChange(e)
+                        if (addressFieldErrors.country) {
+                          setAddressFieldErrors(prev => ({ ...prev, country: false }))
+                        }
+                      }}
                       required
+                      disabled={loadingCountries}
                     >
-                      <option value="">Country</option>
-                      <option value="AE">UAE</option>
-                      <option value="SA">Saudi Arabia</option>
-                      <option value="KW">Kuwait</option>
-                      <option value="QA">Qatar</option>
+                      <option value="">{loadingCountries ? 'Loading...' : 'Select Country'}</option>
+                      {countries.map((country) => (
+                        <option key={country.isoCode} value={country.name}>
+                          {country.name}
+                        </option>
+                      ))}
                     </select>
                     <select
-                      className={styles.addressInput}
-                      value={addressForm.state}
-                      onChange={(e) => handleAddressFormChange('state', e.target.value)}
+                      className={`${styles.addressInput} ${addressFieldErrors.city ? styles.addressInputError : ''}`}
+                      value={selectedCity}
+                      onChange={(e) => {
+                        handleCityChange(e)
+                        if (addressFieldErrors.city) {
+                          setAddressFieldErrors(prev => ({ ...prev, city: false }))
+                        }
+                      }}
+                      disabled={!selectedCountry || loadingCities}
                       required
                     >
-                      <option value="">State</option>
-                      <option value="Dubai">Dubai</option>
-                      <option value="Abu Dhabi">Abu Dhabi</option>
-                      <option value="Sharjah">Sharjah</option>
-                      <option value="Ajman">Ajman</option>
+                      <option value="">{loadingCities ? 'Loading...' : selectedCountry ? 'Select City' : 'Select Country First'}</option>
+                      {cities.map((city) => (
+                        <option key={city.name} value={city.name}>
+                          {city.name}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className={`${styles.addressInput} ${addressFieldErrors.state ? styles.addressInputError : ''}`}
+                      value={selectedState}
+                      onChange={(e) => {
+                        handleZoneChange(e)
+                        if (addressFieldErrors.state) {
+                          setAddressFieldErrors(prev => ({ ...prev, state: false }))
+                        }
+                      }}
+                      disabled={!selectedCity || loadingZones}
+                      required
+                    >
+                      <option value="">{loadingZones ? 'Loading...' : selectedCity ? 'Select Zone' : 'Select City First'}</option>
+                      {zones.map((zone) => (
+                        <option key={zone.id} value={zone.name}>
+                          {zone.name}
+                        </option>
+                      ))}
+                      <option value="Other">Other</option>
                     </select>
                     <input
-                      className={styles.addressInput}
-                      placeholder="City"
-                      value={addressForm.city}
-                      onChange={(e) => handleAddressFormChange('city', e.target.value)}
-                      required
-                    />
-                    <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.postalCode ? styles.addressInputError : ''}`}
                       placeholder="Postal Code"
                       value={addressForm.postalCode}
-                      onChange={(e) => handleAddressFormChange('postalCode', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('postalCode', e.target.value)
+                        if (addressFieldErrors.postalCode) {
+                          setAddressFieldErrors(prev => ({ ...prev, postalCode: false }))
+                        }
+                      }}
                       required
                     />
                     <input
-                      className={styles.addressInput}
+                      className={`${styles.addressInput} ${addressFieldErrors.addressLine1 ? styles.addressInputError : ''}`}
                       placeholder="Address Line 1"
                       value={addressForm.addressLine1}
-                      onChange={(e) => handleAddressFormChange('addressLine1', e.target.value)}
+                      onChange={(e) => {
+                        handleAddressFormChange('addressLine1', e.target.value)
+                        if (addressFieldErrors.addressLine1) {
+                          setAddressFieldErrors(prev => ({ ...prev, addressLine1: false }))
+                        }
+                      }}
                       required
                     />
                     <input
@@ -2129,6 +2762,7 @@ export default function CheckoutPage() {
                       onClick={() => {
                         dispatch(setShowShippingForm(false))
                         dispatch(setShippingSameAsDelivery(true))
+                        setCustomLabel('') // Reset custom label
                       }}
                     >
                       Cancel
@@ -2490,31 +3124,21 @@ export default function CheckoutPage() {
                       <span>- AED {couponDiscountAmount.toFixed(2)}</span>
                     </div>
                   )}
-                  {appliedDiscount && qoynsDiscountAmount > 0 && (
-                    <>
-                      <div className={styles.totalRowDiscount}>
-                        <span>Qoyns Discount</span>
-                        <span>- AED {qoynsDiscountAmount.toFixed(2)}</span>
-                      </div>
-                      <div className={styles.totalRow}>
-                        <span>Subtotal (after discount)</span>
-                        <span>AED {subtotal.toFixed(2)}</span>
-                      </div>
-                    </>
-                  )}
                   {/* Gig Completion offer display removed per request (still applied to subtotal calculation) */}
-                  <div className={styles.totalRow}>
-                    <span>VAT ({(vatRate * 100).toFixed(0)}%)</span>
-                    <span>AED {vatAmount.toFixed(2)}</span>
-                  </div>
                   <div className={styles.totalRow}>
                     <span>Shipping</span>
                     <span>AED {shippingCost.toFixed(2)}</span>
                   </div>
                   <div className={styles.totalRow}>
                     <span>Order Total</span>
-                    <span>AED {orderTotalBeforeCashWallet.toFixed(2)}</span>
+                    <span>AED {orderTotalBeforeQoyns.toFixed(2)}</span>
                   </div>
+                  {appliedDiscount && qoynsDiscountAmount > 0 && (
+                    <div className={styles.totalRowDiscount}>
+                      <span>Qoyns Discount</span>
+                      <span>- AED {qoynsDiscountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
                   {userRole === 'influencer' && useCashWallet && cashWalletDiscountAmount > 0 && (
                     <div className={styles.totalRowDiscount}>
                       <span>Cash Wallet</span>

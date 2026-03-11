@@ -55,7 +55,7 @@ export default function StoreDetail() {
   const storeId = useMemo(() => searchParams.get('storeId'), [searchParams])
   const dispatch = useDispatch()
   const { storeProducts, loading, error, storePagination } = useSelector(state => state.products)
-  const limit = 20
+  const limit = 21
 
   // Reset state whenever the store changes and on unmount
   useEffect(() => {
@@ -80,6 +80,13 @@ export default function StoreDetail() {
     dispatch(fetchStoreProducts({ storeId, page: currentPage, limit }))
   }, [dispatch, storeId, currentPage])
 
+  const totalResults = useMemo(() => {
+    if (typeof storePagination?.total === 'number') {
+      return storePagination.total
+    }
+    return Array.isArray(storeProducts) ? storeProducts.length : 0
+  }, [storePagination?.total, storeProducts])
+
   const totalPages = useMemo(() => {
     if (storePagination?.pages) {
       return storePagination.pages
@@ -91,6 +98,16 @@ export default function StoreDetail() {
 
     return 1
   }, [storePagination, limit])
+
+  // Calculate the range of products displayed on current page
+  const productRange = useMemo(() => {
+    if (totalResults === 0 || !Array.isArray(storeProducts) || storeProducts.length === 0) {
+      return { start: 0, end: 0 }
+    }
+    const start = (currentPage - 1) * limit + 1
+    const end = Math.min(currentPage * limit, totalResults)
+    return { start, end }
+  }, [currentPage, limit, totalResults, storeProducts])
 
   const pageNumbers = useMemo(() => {
     return Array.from({ length: totalPages }, (_, index) => index + 1)
@@ -125,13 +142,14 @@ export default function StoreDetail() {
             {/* Main Content Area with Scrollable Products */}
             <div className="content-area">
               <div className="sticky-header">
-                <SectionHeader
-                  title="Products"
-                  showNavigation={false}
-                  showButton={true}
-                  buttonText="Sort By"
-                  onButtonClick={() => {}}
-                />
+                <div className="section-header">
+                  <h2 className="section-title">Products</h2>
+                  <div className="section-actions">
+                    <button className="sort-button" onClick={() => {}}>
+                      Sort By
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div className="products-scroll-container">
@@ -152,10 +170,17 @@ export default function StoreDetail() {
                             id={product._id || product.id}
                             slug={product.slug || product._id || product.id}
                             title={product.title || product.name || 'Product'}
-                            price={product.discount_price ? `AED ${product.discount_price}` : product.price ? `AED ${product.price}` : 'AED 0'}
+                            price={(() => {
+                              const pVat = product.price_with_vat ?? product.price
+                              const dVat = product.discount_price_with_vat ?? product.discount_price
+                              const eff = (dVat != null && dVat > 0) ? dVat : pVat
+                              return eff != null ? `AED ${eff}` : 'AED 0'
+                            })()}
                             rating={product.average_rating || product.rating || '4.0'}
                             deliveryTime={product.deliveryTime || '30 Min'}
                             image={product.images?.[0]?.url || product.image || '/iphone.jpg'}
+                            priceWithVat={product.price_with_vat ?? product.price}
+                            discountPriceWithVat={product.discount_price_with_vat != null && Number(product.discount_price_with_vat) > 0 ? product.discount_price_with_vat : undefined}
                           />
                         </div>
                       ))
@@ -169,34 +194,41 @@ export default function StoreDetail() {
               </div>
 
               {!loading && totalPages > 1 && (
-                <div className="pagination-controls" role="navigation" aria-label="Store products pagination">
-                  <button
-                    type="button"
-                    className="pagination-button"
-                    onClick={handlePrevious}
-                    disabled={currentPage === 1}
-                  >
-                    Previous
-                  </button>
-                  {pageNumbers.map((page) => (
+                <div className="pagination-wrapper">
+                  <div className="pagination-controls" role="navigation" aria-label="Store products pagination">
                     <button
-                      key={page}
                       type="button"
-                      className={`pagination-button ${page === currentPage ? 'active' : ''}`}
-                      onClick={() => handlePageChange(page)}
-                      aria-current={page === currentPage ? 'page' : undefined}
+                      className="pagination-button"
+                      onClick={handlePrevious}
+                      disabled={currentPage === 1}
                     >
-                      {page}
+                      Previous
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="pagination-button"
-                    onClick={handleNext}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                  </button>
+                    {pageNumbers.map((page) => (
+                      <button
+                        key={page}
+                        type="button"
+                        className={`pagination-button ${page === currentPage ? 'active' : ''}`}
+                        onClick={() => handlePageChange(page)}
+                        aria-current={page === currentPage ? 'page' : undefined}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="pagination-button"
+                      onClick={handleNext}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                  {totalResults > 0 && (
+                    <span className="pagination-count">
+                      {productRange.start} - {productRange.end} products out of {totalResults}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -267,13 +299,69 @@ export default function StoreDetail() {
           background: #ffffff;
         }
 
+        .section-header {
+          display: flex;
+          width: 100%;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 24px;
+        }
+
+        .section-title {
+          color: #000;
+          font-family: 'DM Sans', -apple-system, Roboto, Helvetica, sans-serif;
+          font-size: 28px;
+          font-weight: 700;
+          line-height: 120%;
+          margin: 0;
+        }
+
+        .section-actions {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .sort-button {
+          padding: 8px 16px;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          background: #ffffff;
+          color: #111827;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .sort-button:hover {
+          background: #f9fafb;
+        }
+
+        .pagination-wrapper {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          gap: 12px;
+          margin-top: 32px;
+        }
+
         .pagination-controls {
           display: flex;
           justify-content: center;
           align-items: center;
           gap: 8px;
-          margin-top: 32px;
           flex-wrap: wrap;
+        }
+
+        .pagination-count {
+          color: #6b7280;
+          font-family: 'DM Sans', -apple-system, Roboto, Helvetica, sans-serif;
+          font-size: 14px;
+          font-weight: 400;
+          line-height: 140%;
+          white-space: nowrap;
         }
 
         .pagination-button {
@@ -327,6 +415,22 @@ export default function StoreDetail() {
           }
         }
         
+        @media (max-width: 768px) {
+          .section-header {
+            flex-direction: column;
+            gap: 16px;
+            align-items: flex-start;
+          }
+
+          .section-title {
+            font-size: 24px;
+          }
+          
+          .pagination-count {
+            font-size: 13px;
+          }
+        }
+
         @media (max-width: 640px) {
           .grid-3 { 
             grid-template-columns: 1fr; 

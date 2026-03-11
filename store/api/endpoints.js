@@ -7,10 +7,12 @@ export const BASES = {
   auth: process.env.NEXT_PUBLIC_AUTH_BASE_URL || 'https://backendauth.qliq.ae/api',
   cart: process.env.NEXT_PUBLIC_CART_BASE_URL || 'https://backendcart.qliq.ae/api',
   payment: process.env.NEXT_PUBLIC_PAYMENT_BASE_URL || 'https://backendcart.qliq.ae/api',
-  delivery: process.env.NEXT_PUBLIC_PAYMENT_BASE_URL || 'https://backendcart.qliq.ae/api', // Same as payment service
+  delivery: process.env.NEXT_PUBLIC_DELIVERY_BASE_URL || process.env.NEXT_PUBLIC_PAYMENT_BASE_URL || 'https://backendcart.qliq.ae/api',
+  gigs: process.env.NEXT_PUBLIC_GIGS_BASE_URL || 'https://backendgigs.qliq.ae/api',
   upload: process.env.NEXT_PUBLIC_UPLOAD_BASE_URL || 'https://ecomupload.qliq.ae/api',
   review: process.env.NEXT_PUBLIC_REVIEW_BASE_URL || 'https://backendreview.qliq.ae/api',
   subscription: process.env.NEXT_PUBLIC_SUBSCRIPTION_BASE_URL || 'https://backendamp.qliq.ae/api',
+  subPayment: process.env.NEXT_PUBLIC_SUB_PAYMENT_BASE_URL || 'https://backendpayment.qliq.ae/api',
   wallet: process.env.NEXT_PUBLIC_WALLET_BASE_URL || 'https://backendwallet.qliq.ae/api',
 }
 
@@ -79,6 +81,37 @@ export const catalog = {
     return `${BASES.catalog}/products/store-products/${storeId}/cheap-deals${queryString ? `?${queryString}` : ''}`;
   },
   productsByLevel4Category: (categorySlug) => `${BASES.catalog}/products/level4/${categorySlug}`,
+  productsByLevel4AndStore: (params = {}) => {
+    const queryParams = new URLSearchParams();
+    if (params.level4) queryParams.append('level4', params.level4);
+    if (params.storeId) queryParams.append('storeId', params.storeId);
+    if (params.page) queryParams.append('page', params.page);
+    if (params.limit) queryParams.append('limit', params.limit);
+    if (params.sort) queryParams.append('sort', params.sort);
+    if (params.min_price) queryParams.append('min_price', params.min_price);
+    if (params.max_price) queryParams.append('max_price', params.max_price);
+    if (params.min_rating) queryParams.append('min_rating', params.min_rating);
+    if (params.in_stock !== undefined) queryParams.append('in_stock', params.in_stock);
+    if (params.brand_id) {
+      const brandIds = Array.isArray(params.brand_id) ? params.brand_id : [params.brand_id];
+      brandIds.forEach(id => queryParams.append('brand_id', id));
+    }
+    // Handle attribute filters
+    if (params.attributes) {
+      Object.entries(params.attributes).forEach(([key, values]) => {
+        const valuesArray = Array.isArray(values) ? values : [values];
+        valuesArray.forEach(v => queryParams.append(`attr_${key}`, String(v)));
+      });
+    }
+    // Handle specification filters
+    if (params.specifications) {
+      Object.entries(params.specifications).forEach(([key, values]) => {
+        const valuesArray = Array.isArray(values) ? values : [values];
+        valuesArray.forEach(v => queryParams.append(`spec_${key}`, String(v)));
+      });
+    }
+    return `${BASES.catalog}/products/level4/store?${queryParams.toString()}`;
+  },
   productsByCategory: (categoryId, limit = 100) => `${BASES.catalog}/products/category?categoryId=${categoryId}&limit=${limit}`,
   similarProducts: (productId, limit = 10) => `${BASES.catalog}/products/similar/${productId}?limit=${limit}`,
   stores: `${BASES.catalog}/stores`,
@@ -107,7 +140,11 @@ export const catalog = {
   hypermarketLevel2Categories: `${BASES.catalog}/categories/hypermarket/level2`,
   supermarketLevel2Categories: `${BASES.catalog}/categories/supermarket/level2`,
   storeLevel2Categories: `${BASES.catalog}/categories/store/level2`,
-  categoryChildren: (slug) => `${BASES.catalog}/categories/level2/${slug}/children`,
+  categoryChildren: (slug, params = {}) => {
+    const { page = 1, limit = 10 } = params;
+    const q = new URLSearchParams({ page: String(page), limit: String(limit) });
+    return `${BASES.catalog}/categories/level2/${encodeURIComponent(slug)}/children?${q.toString()}`;
+  },
   categoryBySlug: (slug) => `${BASES.catalog}/categories/slug/${slug}`,
   searchProducts: (query) => `${BASES.catalog}/search/products?q=${encodeURIComponent(query)}`,
   homepageSections: (params = {}) => {
@@ -178,7 +215,41 @@ export const search = {
   storeFilters: (storeId) => `${BASES.search}/search/filters/store?storeId=${encodeURIComponent(storeId)}`,
   // Store products endpoint
   storeProducts: (storeId, params = {}) => {
-    const usp = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([_, v]) => v !== undefined && v !== null)));
+    const usp = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        if (key === 'brand_id') {
+          // Handle brand_id as array (multiple brands)
+          const brandIds = Array.isArray(value) ? value : [value];
+          brandIds.forEach(id => usp.append('brand_id', String(id)));
+        } else if (key === 'attributes') {
+          // Handle nested objects for attributes
+          if (typeof value === 'object' && !Array.isArray(value)) {
+            Object.entries(value).forEach(([attrKey, attrValues]) => {
+              const valuesArray = Array.isArray(attrValues) ? attrValues : [attrValues];
+              valuesArray.forEach(v => {
+                usp.append(`attr_${attrKey}`, String(v));
+              });
+            });
+          }
+        } else if (key === 'specifications') {
+          // Handle nested objects for specifications
+          if (typeof value === 'object' && !Array.isArray(value)) {
+            Object.entries(value).forEach(([specKey, specValues]) => {
+              const valuesArray = Array.isArray(specValues) ? specValues : [specValues];
+              valuesArray.forEach(v => {
+                usp.append(`spec_${specKey}`, String(v));
+              });
+            });
+          }
+        } else if (Array.isArray(value)) {
+          // Handle other array parameters
+          value.forEach(v => usp.append(key, String(v)));
+        } else {
+          usp.append(key, String(value));
+        }
+      }
+    });
     return `${BASES.search}/search/store/${encodeURIComponent(storeId)}/products?${usp.toString()}`;
   },
   // Search filters endpoint
@@ -202,6 +273,7 @@ export const auth = {
 export const cart = {
   base: BASES.cart,
   add: `${BASES.cart}/cart/add`,
+  clickCart: `${BASES.cart}/cart/click-cart`,
   get: `${BASES.cart}/cart`,
   update: `${BASES.cart}/cart/update`,
   remove: `${BASES.cart}/cart/remove`,
@@ -216,7 +288,10 @@ export const payment = {
   base: BASES.payment,
   stripeCheckout: `${BASES.payment}/payment/stripe/checkout`,
   stripeHostedCheckout: `${BASES.payment}/payment/stripe/hosted-checkout`,
-  cashWalletCheckout: `${BASES.payment}/payment/cash-wallet/checkout`,
+  // Cash wallet checkout: full payment via wallet - always use cart backend
+  cashWalletCheckout: `${BASES.cart}/payment/cash-wallet/checkout`,
+  stripeConfirmSession: (sessionId) => `${BASES.payment}/payment/stripe/confirm-session/${sessionId}`,
+  stripeConfirm: (paymentIntentId) => `${BASES.payment}/payment/stripe/confirm/${paymentIntentId}`,
 }
 
 export const addresses = {
@@ -232,6 +307,7 @@ export const orders = {
   base: `${BASES.cart}/orders`,
   getUserOrders: `${BASES.cart}/orders/user-orders`,
   getOrderById: (orderId) => `${BASES.cart}/orders/${orderId}`,
+  downloadInvoice: (orderId) => `${BASES.cart}/orders/invoice/download?orderId=${orderId}`,
 }
 
 
@@ -264,21 +340,38 @@ export const review = {
 export const subscription = {
   base: BASES.subscription,
   details: `${BASES.subscription}/users/subscription-details`,
-  webSubscription: `https://backendpayment.qliq.ae/api/wallet/web-subscription`,
+  webSubscription: `${BASES.subPayment}/wallet/web-subscription`,
 }
+
+const WALLET_USER_BASE = process.env.NEXT_PUBLIC_WALLET_USER_BASE_URL || 'https://wallet.iqliq.ae/api'
 
 export const wallet = {
   base: BASES.wallet,
   userBalance: `${BASES.wallet}/wallet/qoyn/user-balance`,
   validateRedemption: `${BASES.wallet}/wallet/qoyn/validate-redemption`,
   redeemQoyn: `${BASES.wallet}/wallet/qoyn/redeem`,
+  redeemHistory: `${BASES.wallet}/wallet/qoyn/redeem-history`,
   redeemableCashBalance: `${BASES.wallet}/wallet/cash/redeemable-balance`,
   redeemCash: `${BASES.wallet}/wallet/cash/redeem`,
+  cashHistory: (page = 1, limit = 50) => `${WALLET_USER_BASE}/wallet/user/cash-history?page=${page}&limit=${limit}`,
 }
 
 export const delivery = {
   base: BASES.delivery,
   getShippingMethods: `${BASES.delivery}/delivery/shipping/methods`,
+}
+
+export const gigs = {
+  base: BASES.gigs,
+  acceptedPurchaseGigs: `${BASES.gigs}/gig-completions/accepted-purchase-gigs`,
+  purchase: `${BASES.gigs}/gig-completions/purchase`,
+}
+
+export const zones = {
+  base: `${BASES.auth}/zones`,
+  getCountries: `${BASES.auth}/zones/countries`,
+  getCitiesByCountry: (countryName) => `${BASES.auth}/zones/country/${encodeURIComponent(countryName)}/cities`,
+  getZonesByCity: (cityName) => `${BASES.auth}/zones/city/${encodeURIComponent(cityName)}`,
 }
 
 export const settler = {
@@ -287,6 +380,6 @@ export const settler = {
   getByEmail: (email) => `${BASES.auth}/settlers/email/${email}`,
 }
 
-export default { catalog, search, auth, cart, addresses, orders, upload, review, subscription, wallet, delivery, settler }
+export default { catalog, search, auth, cart, addresses, orders, upload, review, subscription, wallet, delivery, gigs, settler }
 
 

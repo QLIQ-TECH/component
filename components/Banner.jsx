@@ -92,7 +92,7 @@ export default function Banner({
           cursor: pointer;
           color: #000;
           text-align: center;
-          font-family: Inter, -apple-system, Roboto, Helvetica, sans-serif;
+          font-family: 'DM Sans', -apple-system, Roboto, Helvetica, sans-serif;
           font-size: 16px;
           font-weight: 500;
           line-height: 150%;
@@ -110,12 +110,14 @@ export default function Banner({
           }
           
           .banner-content {
-            padding: 24px;
+           
+            padding: 24px 24px 24px 0px;
             align-items: flex-start;
             text-align: flex-start;
           }
 
           .banner-info {
+            margin-top: 20px;
             align-items: flex-start;
           }
 

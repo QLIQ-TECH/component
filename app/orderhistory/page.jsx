@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useSelector, useDispatch } from 'react-redux';
 import { fetchOrders } from '../../store/slices/profileSlice';
 import { createProductReview, updateProductReview, clearReviewState } from '../../store/slices/reviewSlice';
-import { addToCart } from '../../store/slices/cartSlice';
+import { clickCart } from '../../store/slices/cartSlice';
 import { getAuthToken, getUserFromCookies } from '../../utils/userUtils';
 import { useToast } from '../../contexts/ToastContext';
 import { orders as orderEndpoints } from '../../store/api/endpoints';
@@ -38,6 +38,7 @@ const OrderHistoryPage = () => {
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState(null);
+  const [buyAgainLoading, setBuyAgainLoading] = useState(false);
 
   // Fetch order by ID directly from API
   useEffect(() => {
@@ -584,55 +585,109 @@ const OrderHistoryPage = () => {
   const handleCancelReview = handleCancelEdit;
 
   const handleBuyAgain = async () => {
+    if (buyAgainLoading) return;
+
     try {
-      // Get the first item from the order (or the specific product if filtered)
-      const item = orderData?.items?.[0];
+      const items = Array.isArray(orderData?.items) ? orderData.items : [];
 
-      if (!item) {
-        showToast('No product found to add to cart', 'error');
+      if (!items.length) {
+        showToast('No products found to add to cart', 'error');
         return;
       }
 
-      // Get user ID for cart operations
-      const userId = await getUserFromCookies();
-      if (!userId) {
-        showToast('Please login to add items to cart', 'error');
+      // Build productIds array - repeat productId for each quantity (e.g. qty 3 = id appears 3 times)
+      // Handle productId from various formats: item.productId, item.id, item.product?._id
+      const productIds = items
+        .map((item) => {
+          const rawId = item.productId ?? item.id ?? item.product?._id ?? item.product?.id;
+          const productId = rawId != null ? String(rawId).trim() : null;
+          const quantity = Math.max(1, Number(item.quantity) || 1);
+          if (!productId) return null;
+          return Array(quantity).fill(productId);
+        })
+        .filter(Boolean)
+        .flat();
+
+      if (!productIds.length) {
+        showToast('No valid products found to add to cart', 'error');
         return;
       }
 
-      // Prepare cart item data
-      const cartItem = {
-        productId: item.productId,
-        name: item.name,
-        price: item.price || item.unitPrice,
-        quantity: item.quantity,
-        image: item.image || '/iphone.jpg', // fallback image
-        brand: item.brand || 'Product'
-      };
+      setBuyAgainLoading(true);
+      const result = await dispatch(clickCart({ productIds, quantity: 1 }));
 
-      console.log('Adding to cart:', cartItem);
-
-      // Add to cart
-      const result = await dispatch(addToCart({
-        userId,
-        productId: cartItem.productId,
-        name: cartItem.name,
-        price: cartItem.price,
-        quantity: cartItem.quantity,
-        image: cartItem.image,
-        brand: cartItem.brand
-      }));
-
-      if (addToCart.fulfilled.match(result)) {
-        showToast('Item added to cart successfully!', 'success');
-        // Navigate to checkout page
+      if (clickCart.fulfilled.match(result)) {
+        const itemCount = productIds.length;
+        const message = itemCount > 1
+          ? `Added ${itemCount} items to cart successfully!`
+          : 'Item added to cart successfully!';
+        showToast(message, 'success');
         window.location.href = '/checkout';
       } else {
-        showToast('Failed to add item to cart. Please try again.', 'error');
+        showToast(result.payload || 'Failed to add items to cart. Please try again.', 'error');
       }
     } catch (error) {
-      console.error('Error adding to cart:', error);
-      showToast('Error adding item to cart. Please try again.', 'error');
+      console.error('Error adding items to cart from Buy Again:', error);
+      showToast(error?.message || 'Error adding items to cart. Please try again.', 'error');
+    } finally {
+      setBuyAgainLoading(false);
+    }
+  };
+
+  const handleDownloadInvoice = async () => {
+    try {
+      if (!orderData || !orderData._id) {
+        showToast('Order data not available', 'error');
+        return;
+      }
+
+      // Get authentication token
+      const token = await getAuthToken();
+      if (!token) {
+        showToast('Please login to download invoice', 'error');
+        return;
+      }
+
+      // Get order ID
+      const orderId = orderData._id;
+
+      // Construct the API URL
+      const apiUrl = orderEndpoints.downloadInvoice(orderId);
+
+      console.log('Downloading invoice from:', apiUrl);
+
+      // Fetch the PDF
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Failed to download invoice' }));
+        throw new Error(errorData.message || `HTTP error ${response.status}`);
+      }
+
+      // Get the PDF blob
+      const blob = await response.blob();
+
+      // Create a download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${orderData.orderNumber}_invoice.pdf`;
+      document.body.appendChild(a);
+      a.click();
+
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      showToast('Invoice downloaded successfully!', 'success');
+    } catch (error) {
+      console.error('Error downloading invoice:', error);
+      showToast(`Error downloading invoice: ${error.message}`, 'error');
     }
   };
 
@@ -660,36 +715,9 @@ const OrderHistoryPage = () => {
     }
   };
 
-  // Compute per-item unit price including VAT and Tax
-  const getItemUnitPriceWithTaxes = (item, order) => {
+  // Compute per-item unit price (no VAT - price is already inclusive)
+  const getItemUnitPriceWithTaxes = (item) => {
     const base = Number(item?.unitPrice ?? item?.price ?? 0) || 0;
-    const qty = Math.max(1, Number(item?.quantity) || 1);
-    const lineTax = Number(item?.tax) || 0;
-    const lineVat = Number(item?.vat) || 0;
-
-    // Prefer item-level tax/vat if provided (assumed totals for the line)
-    if (lineTax || lineVat) {
-      const perUnitTaxes = (lineTax + lineVat) / qty;
-      const inclusive = base + perUnitTaxes;
-      return Number(inclusive.toFixed(2));
-    }
-
-    // Otherwise compute a tax rate from order totals and apply to the unit price
-    const derivedSubtotal = Number(order?.subtotal);
-    const fallbackSubtotal = Array.isArray(order?.items)
-      ? order.items.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0)
-      : 0;
-    const orderSubtotal = (isNaN(derivedSubtotal) || derivedSubtotal <= 0) ? fallbackSubtotal : derivedSubtotal;
-    const orderTax = Number(order?.tax) || 0;
-    const orderVat = Number(order?.vat) || 0;
-
-    if (orderSubtotal > 0 && (orderTax || orderVat)) {
-      const taxRate = (orderTax + orderVat) / orderSubtotal; // fraction applied to unit price
-      const inclusive = base * (1 + taxRate);
-      return Number(inclusive.toFixed(2));
-    }
-
-    // Fallback: no taxes available
     return Number(base.toFixed(2));
   };
 
@@ -733,40 +761,49 @@ const OrderHistoryPage = () => {
       .join(' ');
   };
 
-  // Calculate discounted price and discount amount for an item when discountType is gig_completion
+  // Calculate discounted price and discount amount for an item.
+  // Only show product-level discount (discountName, discountAmount or discountPercentage).
+  // Do NOT display order-level gig_completion near products - only show offers/coupons when present on the product.
   const getItemPriceDetails = (item, order) => {
     const basePrice = Number(item?.unitPrice ?? item?.price ?? 0) || 0;
-    
-    // If discountType is gig_completion, calculate discounted price
-    if (order?.discountType === 'gig_completion' && order?.discount > 0) {
-      const totalDiscount = Number(order.discount) || 0;
-      const orderSubtotal = getItemsSubtotal(order);
-      
-      if (orderSubtotal > 0) {
-        // Calculate discount proportion for this item
-        const itemTotal = basePrice * (Number(item?.quantity) || 1);
-        const discountProportion = itemTotal / orderSubtotal;
-        const itemDiscount = totalDiscount * discountProportion;
-        const discountPerUnit = itemDiscount / (Number(item?.quantity) || 1);
-        const discountedPrice = basePrice - discountPerUnit;
-        const discountPercentage = basePrice > 0 ? ((discountPerUnit / basePrice) * 100) : 0;
-        
-        return {
-          originalPrice: basePrice,
-          discountAmount: Number(discountPerUnit.toFixed(2)),
-          discountedPrice: Math.max(0, Number(discountedPrice.toFixed(2))),
-          discountPercentage: Number(discountPercentage.toFixed(2)),
-          discountType: order.discountType
-        };
+    const qty = Math.max(1, Number(item?.quantity) || 1);
+
+    // Product-level discount only: item has discountName and either discountAmount or discountPercentage.
+    // Never display gig_completion - exclude when discountName indicates gig completion (e.g. "Gig Completion").
+    const isGigCompletionDiscount = item?.discountName && /gig\s*completion|completion\s*discount/i.test(String(item.discountName));
+    const hasItemDiscount = !isGigCompletionDiscount && item?.discountName && (Number(item?.discountAmount) > 0 || Number(item?.discountPercentage) > 0);
+    if (hasItemDiscount) {
+      let discountPerUnit = 0;
+      let discountPercentage = 0;
+
+      if (Number(item.discountPercentage) > 0) {
+        discountPercentage = Number(item.discountPercentage);
+        discountPerUnit = (basePrice * discountPercentage) / 100;
+      } else if (Number(item.discountAmount) > 0) {
+        discountPerUnit = Number(item.discountAmount);
+        discountPercentage = basePrice > 0 ? (discountPerUnit / basePrice) * 100 : 0;
       }
+
+      const discountedPrice = Math.max(0, basePrice - discountPerUnit);
+
+      return {
+        originalPrice: basePrice,
+        discountAmount: Number(discountPerUnit.toFixed(2)),
+        discountedPrice: Number(discountedPrice.toFixed(2)),
+        discountPercentage: Number(discountPercentage.toFixed(2)),
+        discountType: null,
+        discountName: item.discountName
+      };
     }
-    
+
+    // No product-level discount - do not display any discount (including gig_completion)
     return {
       originalPrice: basePrice,
       discountAmount: 0,
       discountedPrice: basePrice,
       discountPercentage: 0,
-      discountType: null
+      discountType: null,
+      discountName: null
     };
   };
 
@@ -815,19 +852,8 @@ const OrderHistoryPage = () => {
     return Math.max(0, discountedSubtotal); // Ensure it doesn't go negative
   };
 
-  // Compute total VAT across displayed items - VAT should be calculated on discounted amount at 5%
-  const getItemsVat = (order) => {
-    if (!order || !Array.isArray(order.items)) return 0;
-
-    const discountedSubtotal = getDiscountedSubtotal(order);
-
-    // Always use 5% VAT rate
-    const vatRate = 0.05;
-
-    // Calculate VAT on discounted subtotal (matching checkout logic)
-    const vatAmount = discountedSubtotal * vatRate;
-    return Number(vatAmount.toFixed(2));
-  };
+  // No VAT - price is already inclusive
+  const getItemsVat = () => 0;
 
   if (orderLoading) {
     return (
@@ -1290,8 +1316,13 @@ const OrderHistoryPage = () => {
                         <div className={styles.productNumber}>#{index + 1}</div>
                         {(() => {
                           const priceDetails = getItemPriceDetails(item, orderData);
-                          const hasDiscount = priceDetails.discountAmount > 0;
-                          
+                          const hasDiscount = priceDetails.discountAmount > 0 && priceDetails.discountType !== 'gig_completion';
+                          const discountLabel = priceDetails.discountName
+                            ? `${priceDetails.discountName} (${priceDetails.discountPercentage}% OFF)`
+                            : priceDetails.discountType
+                              ? `${formatDiscountType(priceDetails.discountType)} (${priceDetails.discountPercentage}% OFF)`
+                              : `${priceDetails.discountPercentage}% OFF`;
+
                           return (
                             <div className={styles.productPriceContainer}>
                               {hasDiscount ? (
@@ -1300,7 +1331,7 @@ const OrderHistoryPage = () => {
                                     AED {priceDetails.originalPrice.toFixed(2)}
                                   </p>
                                   <p className={styles.discountType}>
-                                    {formatDiscountType(priceDetails.discountType)} ({priceDetails.discountPercentage}% OFF)
+                                    {discountLabel}
                                   </p>
                                   <p className={styles.discountAmount}>
                                     - AED {priceDetails.discountAmount.toFixed(2)}
@@ -1330,52 +1361,51 @@ const OrderHistoryPage = () => {
                   <span className={styles.costValue}>AED {getDiscountedItemsSubtotal(orderData).toFixed(2)}</span>
                 </div>
 
-                {/* Shipping */}
+                {/* Qoyns Discount - below subtotal */}
+                {(Number(orderData.qoynsDiscountAmount) || 0) > 0 && (
+                  <div className={styles.costItem}>
+                    <span className={styles.costLabel}>Qoyns Discount</span>
+                    <span className={styles.discountValue || styles.costValue}>
+                      - AED {(Number(orderData.qoynsDiscountAmount) || 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Delivery */}
                 <div className={styles.costItem}>
-                  <span className={styles.costLabel}>Shipping</span>
+                  <span className={styles.costLabel}>Delivery</span>
                   <span className={styles.costValue}>
                     AED {((orderData.shippingCost === 0 || !orderData.shippingCost) ? 9.00 : Number(orderData.shippingCost)).toFixed(2)}
                   </span>
                 </div>
 
-                {/* VAT - Use order data VAT */}
+                {/* Amount to Pay - subtotal + delivery only (above the line) */}
                 <div className={styles.costItem}>
-                  <span className={styles.costLabel}>VAT</span>
+                  <span className={styles.costLabel}>Amount to Pay</span>
                   <span className={styles.costValue}>
-                    AED {(Number(orderData.vat) || 0).toFixed(2)}
+                    AED {(
+                      getDiscountedItemsSubtotal(orderData) +
+                      ((orderData.shippingCost === 0 || !orderData.shippingCost) ? 9.00 : Number(orderData.shippingCost))
+                    ).toFixed(2)}
                   </span>
                 </div>
 
-                {/* Discount - Only for qoyns and cash wallet, NOT for gig_completion */}
-                {(() => {
-                  const qoynsDiscount = orderData.qoynsDiscountAmount || 0;
-                  const cashWalletDiscount = orderData.cashWalletAmount || 0;
-                  const otherDiscount = (orderData.discountType && orderData.discountType !== 'gig_completion' && orderData.discount > 0) ? (orderData.discount || 0) : 0;
-                  const totalDiscount = qoynsDiscount + cashWalletDiscount + otherDiscount;
-                  const discountType = orderData.discountType;
-                  const discount = orderData.discount;
-                  
-                  if (totalDiscount > 0) {
-                    return (
-                      <div className={styles.costItem}>
-                        <span className={styles.costLabel}> Discount</span>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                          <span className={styles.discountValue}>
-                            - AED {discount.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-                {/* Order Total */}
+                {/* Cash Wallet Discount - above the line */}
+                {(Number(orderData.cashWalletAmount) || 0) > 0 && (
+                  <div className={styles.costItem}>
+                    <span className={styles.costLabel}>Cash Wallet Discount</span>
+                    <span className={styles.discountValue || styles.costValue}>
+                      - AED {(Number(orderData.cashWalletAmount) || 0).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Order Total - final amount, below the line */}
                 <div className={`${styles.costItem} ${styles.totalItem}`}>
                   <span className={styles.costLabel}>Order Total</span>
                   <span className={styles.totalValue}>
                     AED {(Number(orderData.totalAmount) || (
                       getDiscountedItemsSubtotal(orderData) +
-                      (Number(orderData.vat) || 0) +
                       ((orderData.shippingCost === 0 || !orderData.shippingCost) ? 9.00 : Number(orderData.shippingCost)) -
                       (orderData.qoynsDiscountAmount || 0) -
                       (orderData.cashWalletAmount || 0)
@@ -1388,10 +1418,14 @@ const OrderHistoryPage = () => {
                 <button
                   className={styles.buyAgainButton}
                   onClick={handleBuyAgain}
+                  disabled={buyAgainLoading}
                 >
-                  Buy Again
+                  {buyAgainLoading ? 'Adding...' : 'Buy Again'}
                 </button>
-                <button className={styles.downloadInvoiceButton}>
+                <button 
+                  className={styles.downloadInvoiceButton}
+                  onClick={handleDownloadInvoice}
+                >
                   Download Invoice
                 </button>
               </div>

@@ -10,7 +10,55 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
   const [localPriceRange, setLocalPriceRange] = useState({});
   const [priceDebounceTimer, setPriceDebounceTimer] = useState(null);
   const [activeSlider, setActiveSlider] = useState(null);
+  const [hoveredSlider, setHoveredSlider] = useState(null);
   const activeSliderDataRef = useRef(null);
+  
+  // Cache the initial bounds for range facets to prevent jumping/shrinking during filtering
+  const [cachedFacetBounds, setCachedFacetBounds] = useState({});
+
+  useEffect(() => {
+    if (!Array.isArray(facets)) return;
+    
+    setCachedFacetBounds(prev => {
+      const next = { ...prev };
+      let changed = false;
+      
+      facets.forEach(facet => {
+        if (facet.type === 'range' && facet.min !== undefined && facet.max !== undefined) {
+          const existing = next[facet.key];
+          
+          // If no cached bounds exist, set them
+          if (!existing) {
+            next[facet.key] = { min: facet.min, max: facet.max };
+            changed = true;
+          } else {
+            // If cached bounds exist, check if the new bounds are significantly different
+            // This indicates a new search query rather than just a filter adjustment
+            const minDiff = Math.abs(existing.min - facet.min);
+            const maxDiff = Math.abs(existing.max - facet.max);
+            const rangeSize = Math.max(existing.max - existing.min, 1); // Avoid division by zero
+            const minDiffPercent = (minDiff / rangeSize) * 100;
+            const maxDiffPercent = (maxDiff / rangeSize) * 100;
+            
+            // If min or max changed by more than 15% of the original range, it's likely a new search
+            // Also update if the new range extends beyond the cached range (new products added)
+            // Or if ranges don't overlap at all (completely different search)
+            const rangesOverlap = !(facet.min > existing.max || facet.max < existing.min);
+            const isSignificantChange = minDiffPercent > 15 || maxDiffPercent > 15 ||
+                                       !rangesOverlap ||
+                                       (facet.min < existing.min && facet.max > existing.max);
+            
+            if (isSignificantChange) {
+              next[facet.key] = { min: facet.min, max: facet.max };
+              changed = true;
+            }
+          }
+        }
+      });
+      
+      return changed ? next : prev;
+    });
+  }, [facets]);
   
   // Debounced price range handler
   const debouncedPriceChange = useCallback((facetKey, newRange) => {
@@ -124,36 +172,52 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
 
   // Global mouse move handler for dragging
   useEffect(() => {
+    let rafId = null;
+    
     const handleGlobalMouseMove = (event) => {
       if (!activeSlider || !activeSliderDataRef.current) return;
       
-      const { wrapper, facetKey, facetMin, facetMax } = activeSliderDataRef.current;
-      if (!wrapper) return;
-      
-      // Get current values dynamically from state
-      const currentRange = localPriceRange[facetKey] || selected[facetKey] || {};
-      const currentMin = currentRange.min ?? facetMin;
-      const currentMax = currentRange.max ?? facetMax;
-      
-      const rect = wrapper.getBoundingClientRect();
-      const mouseX = event.clientX - rect.left;
-      const trackWidth = rect.width;
-      const mousePercent = Math.max(0, Math.min(1, mouseX / trackWidth));
-      const mouseValue = facetMin + (mousePercent * (facetMax - facetMin));
-      
-      if (activeSlider === 'min') {
-        const newValue = Math.min(Math.max(Math.round(mouseValue), facetMin), currentMax);
-        handleRangeChange(facetKey, 'min', newValue.toString(), facetMin, facetMax);
-      } else if (activeSlider === 'max') {
-        const newValue = Math.max(Math.min(Math.round(mouseValue), facetMax), currentMin);
-        handleRangeChange(facetKey, 'max', newValue.toString(), facetMin, facetMax);
+      // Use requestAnimationFrame for smooth updates
+      if (rafId) {
+        cancelAnimationFrame(rafId);
       }
+      
+      rafId = requestAnimationFrame(() => {
+        const { wrapper, facetKey, facetMin, facetMax } = activeSliderDataRef.current;
+        if (!wrapper) return;
+        
+        // Get current values dynamically from state
+        const currentRange = localPriceRange[facetKey] || selected[facetKey] || {};
+        const currentMin = currentRange.min ?? facetMin;
+        const currentMax = currentRange.max ?? facetMax;
+        
+        const rect = wrapper.getBoundingClientRect();
+        const clientX = event.touches?.[0]?.clientX ?? event.clientX;
+        const mouseX = clientX - rect.left;
+        const trackWidth = rect.width;
+        const mousePercent = Math.max(0, Math.min(1, mouseX / trackWidth));
+        const mouseValue = facetMin + (mousePercent * (facetMax - facetMin));
+        const roundedValue = Math.round(mouseValue);
+        
+        if (activeSlider === 'min') {
+          // Ensure min doesn't exceed current max
+          const newValue = Math.min(Math.max(roundedValue, facetMin), currentMax);
+          handleRangeChange(facetKey, 'min', newValue.toString(), facetMin, facetMax);
+        } else if (activeSlider === 'max') {
+          // Ensure max doesn't go below current min and doesn't exceed facetMax
+          const newValue = Math.min(Math.max(roundedValue, currentMin), facetMax);
+          handleRangeChange(facetKey, 'max', newValue.toString(), facetMin, facetMax);
+        }
+      });
     };
 
     if (activeSlider) {
-      document.addEventListener('mousemove', handleGlobalMouseMove);
-      document.addEventListener('touchmove', handleGlobalMouseMove);
+      document.addEventListener('mousemove', handleGlobalMouseMove, { passive: true });
+      document.addEventListener('touchmove', handleGlobalMouseMove, { passive: true });
       return () => {
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+        }
         document.removeEventListener('mousemove', handleGlobalMouseMove);
         document.removeEventListener('touchmove', handleGlobalMouseMove);
       };
@@ -213,7 +277,33 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
   }
 
   // Sync local price range with selected filters when they change externally
+  // Also clear local price range when facets change significantly (new search query)
   useEffect(() => {
+    // Check if price facet bounds changed significantly
+    const priceFacet = facets.find(f => f.key === 'price' && f.type === 'range');
+    if (priceFacet && priceFacet.min !== undefined && priceFacet.max !== undefined) {
+      const cachedPrice = cachedFacetBounds['price'];
+      if (cachedPrice) {
+        const minDiff = Math.abs(cachedPrice.min - priceFacet.min);
+        const maxDiff = Math.abs(cachedPrice.max - priceFacet.max);
+        const rangeSize = cachedPrice.max - cachedPrice.min;
+        const minDiffPercent = rangeSize > 0 ? (minDiff / rangeSize) * 100 : 0;
+        const maxDiffPercent = rangeSize > 0 ? (maxDiff / rangeSize) * 100 : 0;
+        
+        // If bounds changed significantly, clear local price range
+        if (minDiffPercent > 20 || maxDiffPercent > 20 ||
+            priceFacet.min < cachedPrice.min || priceFacet.max > cachedPrice.max ||
+            (priceFacet.min > cachedPrice.max) || (priceFacet.max < cachedPrice.min)) {
+          setLocalPriceRange(prev => {
+            const newLocal = { ...prev };
+            delete newLocal['price'];
+            return newLocal;
+          });
+        }
+      }
+    }
+    
+    // Sync with selected filters
     setLocalPriceRange(prev => {
       const newLocal = { ...prev };
       Object.keys(selected).forEach(key => {
@@ -223,7 +313,7 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
       });
       return newLocal;
     });
-  }, [selected]);
+  }, [selected, facets, cachedFacetBounds]);
 
   if (!open) return null;
 
@@ -335,22 +425,59 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                   </div>
                 )}
                 {facet.type === 'range' && (() => {
-                  const facetMin = facet.min ?? 0;
-                  const facetMax = facet.max ?? 1000;
+                  // Use cached bounds if available to maintain stable slider scale, otherwise fallback to current facet props
+                  // However, if cached bounds are significantly different from facet values (new search), use facet values
+                  const cached = cachedFacetBounds[facet.key] || {};
+                  const cachedMin = cached.min ?? null;
+                  const cachedMax = cached.max ?? null;
+                  
+                  // Check if cached bounds are significantly different from current facet values
+                  let useCached = false;
+                  if (cachedMin !== null && cachedMax !== null && facet.min !== undefined && facet.max !== undefined) {
+                    const rangesOverlap = !(facet.min > cachedMax || facet.max < cachedMin);
+                    const rangeSize = Math.max(cachedMax - cachedMin, 1);
+                    const minDiffPercent = (Math.abs(cachedMin - facet.min) / rangeSize) * 100;
+                    const maxDiffPercent = (Math.abs(cachedMax - facet.max) / rangeSize) * 100;
+                    
+                    // Use cached bounds only if ranges overlap and changes are small (filtering, not new search)
+                    useCached = rangesOverlap && minDiffPercent <= 15 && maxDiffPercent <= 15;
+                  }
+                  
+                  // Use cached bounds for stable slider scale during filtering, but use facet values for new searches
+                  const facetMin = useCached ? cachedMin : (facet.min ?? 0);
+                  const facetMax = useCached ? cachedMax : (facet.max ?? 1000);
+                  
                   const currentRange = localPriceRange[facet.key] || selected[facet.key] || {};
                   const currentMin = currentRange.min ?? facetMin;
                   const currentMax = currentRange.max ?? facetMax;
                   
+                  // Calculate progress bar position and width
+                  const rangeTotal = facetMax - facetMin;
+                  const progressLeft = rangeTotal > 0 ? ((currentMin - facetMin) / rangeTotal) * 100 : 0;
+                  const progressWidth = rangeTotal > 0 ? ((currentMax - currentMin) / rangeTotal) * 100 : 100;
+                  const maxLeft = progressLeft + progressWidth;
+
+                  // Show both tooltips when hovering over either slider or when actively dragging
+                  const isHoveringThisRange = hoveredSlider?.key === facet.key;
+                  const isActiveThisRange = activeSliderDataRef.current?.facetKey === facet.key;
+                  const showMinTooltip = isHoveringThisRange || isActiveThisRange;
+                  const showMaxTooltip = isHoveringThisRange || isActiveThisRange;
+                  
                   return (
                     <div className="filter-range">
                       <div className="range-slider-container">
-                        <div className="range-values">
-                          <span className="range-min">AED {currentMin}</span>
-                          <span className="range-max">AED {currentMax}</span>
+                        <div className="range-selected-display">
+                          <span className="range-price-text">
+                            <span className="range-price-min">AED {facetMin}</span>
+                            {/* <span className="range-price-separator"> – </span> */}
+                            <span className="range-price-max">AED {facetMax}</span>
+                          </span>
                         </div>
                         <div 
                           className="range-slider-wrapper"
                           aria-label="Price range slider"
+                          onMouseEnter={() => setHoveredSlider({ key: facet.key, thumb: 'both' })}
+                          onMouseLeave={() => setHoveredSlider(null)}
                           onMouseDownCapture={(e) => handleTrackPointerDown(e, facet.key, facetMin, facetMax, currentMin, currentMax)}
                           onTouchStartCapture={(e) => handleTrackPointerDown(e, facet.key, facetMin, facetMax, currentMin, currentMax)}
                         >
@@ -358,11 +485,44 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                             <div 
                               className="range-progress" 
                               style={{
-                                left: `${((currentMin - facetMin) / (facetMax - facetMin)) * 100}%`,
-                                width: `${((currentMax - currentMin) / (facetMax - facetMin)) * 100}%`
+                                left: `${Math.max(0, Math.min(100, progressLeft))}%`,
+                                width: `${Math.max(0, Math.min(100, progressWidth))}%`
                               }}
                             ></div>
                           </div>
+
+                          {showMinTooltip && (() => {
+                            const minPosition = Math.max(0, Math.min(100, progressLeft));
+                            // If tooltip is too close to left edge (< 15%), shift it right
+                            const isLeftEdge = minPosition < 15;
+                            return (
+                              <div 
+                                className={`range-tooltip range-tooltip-min ${isLeftEdge ? 'tooltip-left' : ''}`}
+                                style={{ 
+                                  left: `${minPosition}%`
+                                }}
+                              >
+                                AED {currentMin}
+                              </div>
+                            );
+                          })()}
+                          
+                          {showMaxTooltip && (() => {
+                            const maxPosition = Math.max(0, Math.min(100, maxLeft));
+                            // If tooltip is too close to right edge (> 85%), shift it left
+                            const isRightEdge = maxPosition > 85;
+                            return (
+                              <div 
+                                className={`range-tooltip range-tooltip-max ${isRightEdge ? 'tooltip-right' : ''}`}
+                                style={{ 
+                                  left: `${maxPosition}%`
+                                }}
+                              >
+                                AED {currentMax}
+                              </div>
+                            );
+                          })()}
+
                           <input
                             type="range"
                             min={facetMin}
@@ -376,6 +536,15 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                             aria-valuetext={`Minimum price ${currentMin}`}
                             onChange={(e) => handleMinSliderInput(facet.key, e.target.value, facetMin, facetMax)}
                             onInput={(e) => handleMinSliderInput(facet.key, e.target.value, facetMin, facetMax)}
+                            onMouseEnter={() => setHoveredSlider({ key: facet.key, thumb: 'min' })}
+                            onMouseLeave={() => {
+                              // Delay clearing to allow moving to max slider
+                              setTimeout(() => {
+                                if (!document.querySelector(`.range-slider-wrapper[aria-label="Price range slider"]:hover`)) {
+                                  setHoveredSlider(null);
+                                }
+                              }, 50);
+                            }}
                             onMouseDown={(e) => {
                               // Prevent track clicks from jumping the thumb; we handle movement manually
                               e.preventDefault();
@@ -419,7 +588,7 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                             onFocus={() => setActiveSlider('min')}
                             onBlur={() => setActiveSlider(null)}
                             onKeyDown={handleSliderKeyDown(facet.key, 'min', facetMin, facetMax)}
-                            style={{ pointerEvents: 'auto', touchAction: 'none', zIndex: activeSlider === 'min' ? 3 : 2 }}
+                            style={{ pointerEvents: 'none', touchAction: 'none', zIndex: activeSlider === 'min' ? 3 : 2 }}
                             className={`range-slider min-slider ${activeSlider === 'min' ? 'active' : ''}`}
                           />
                           <input
@@ -435,6 +604,15 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                             aria-valuetext={`Maximum price ${currentMax}`}
                             onChange={(e) => handleMaxSliderInput(facet.key, e.target.value, facetMin, facetMax)}
                             onInput={(e) => handleMaxSliderInput(facet.key, e.target.value, facetMin, facetMax)}
+                            onMouseEnter={() => setHoveredSlider({ key: facet.key, thumb: 'max' })}
+                            onMouseLeave={() => {
+                              // Delay clearing to allow moving to min slider
+                              setTimeout(() => {
+                                if (!document.querySelector(`.range-slider-wrapper[aria-label="Price range slider"]:hover`)) {
+                                  setHoveredSlider(null);
+                                }
+                              }, 50);
+                            }}
                             onMouseDown={(e) => {
                               e.preventDefault();
                               setActiveSlider('max');
@@ -477,7 +655,7 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
                             onFocus={() => setActiveSlider('max')}
                             onBlur={() => setActiveSlider(null)}
                             onKeyDown={handleSliderKeyDown(facet.key, 'max', facetMin, facetMax)}
-                            style={{ pointerEvents: 'auto', touchAction: 'none', zIndex: activeSlider === 'max' ? 3 : 2 }}
+                            style={{ pointerEvents: 'none', touchAction: 'none', zIndex: activeSlider === 'max' ? 3 : 2 }}
                             className={`range-slider max-slider ${activeSlider === 'max' ? 'active' : ''}`}
                           />
                         </div>
@@ -634,28 +812,93 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
         .filter-option { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #222; }
         .option-text { flex: 1; }
         .option-count { color: #666; font-size: 12px; }
-        .filter-range { padding-top: 8px; }
-        .range-slider-container { display: flex; flex-direction: column; gap: 12px; }
-        .range-values { display: flex; justify-content: space-between; font-size: 14px; color: #666; }
-        .range-slider-wrapper { position: relative; height: 20px; }
+        .filter-range { 
+          padding-top: 8px; 
+          width: 100%;
+          min-width: 0;
+        }
+        .range-slider-container { 
+          display: flex; 
+          flex-direction: column; 
+          gap: 0;
+          min-height: 64px;
+          width: 100%;
+          max-width: 100%;
+          overflow: hidden;
+          box-sizing: border-box;
+        }
+        .range-selected-display {
+          display: flex;
+          align-items: center;
+          font-size: 16px;
+          font-weight: 500;
+          color: #222;
+          margin-bottom: 16px;
+          min-height: 28px;
+          padding: 0;
+          width: 100%;
+        }
+        .range-price-text {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          width: 100%;
+          min-width: 180px;
+        }
+        .range-price-min {
+          text-align: left;
+          font-variant-numeric: tabular-nums;
+          font-feature-settings: "tnum";
+        }
+        .range-price-max {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+          font-feature-settings: "tnum";
+        }
+        .range-price-separator {
+          display: inline-block;
+          margin: 0 4px;
+          flex-shrink: 0;
+        }
+        .range-slider-wrapper { 
+          position: relative; 
+          height: 20px; 
+          margin: 0;
+          padding: 0;
+          width: 100%;
+          min-width: 100%;
+          max-width: 100%;
+          flex-shrink: 0;
+          box-sizing: border-box;
+        }
         .range-track {
           position: absolute;
           top: 50%;
           left: 0;
           right: 0;
+          width: 100% !important;
           height: 6px;
           background: #e0e0e0;
           border-radius: 3px;
           transform: translateY(-50%);
+          box-sizing: border-box;
+          min-width: 100% !important;
+          max-width: 100% !important;
         }
         .range-progress {
           position: absolute;
           top: 0;
+          left: 0;
           height: 100%;
           background: #0082FF;
           border-radius: 3px;
-          transition: left 0.25s ease-out, width 0.25s ease-out;
+          transition: left 0.15s cubic-bezier(0.4, 0, 0.2, 1), width 0.15s cubic-bezier(0.4, 0, 0.2, 1);
           will-change: left, width;
+          box-sizing: border-box;
+          max-width: 100%;
+        }
+        .range-slider-wrapper:active .range-progress {
+          transition: none;
         }
         .range-slider { 
           position: absolute; 
@@ -678,18 +921,21 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
         .range-slider::-webkit-slider-thumb { 
           -webkit-appearance: none; 
           appearance: none; 
-          height: 18px; 
-          width: 18px; 
-          background: #0082FF; 
+          height: 20px; 
+          width: 20px; 
+          background: radial-gradient(circle, #fff 30%, #0082FF 30%);
           border-radius: 50%; 
           cursor: pointer; 
-          border: 2px solid #fff; 
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
-          pointer-events: auto; /* Keep thumbs clickable even when track is disabled */
+          border: 3px solid #fff; 
+          box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+          transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+          pointer-events: auto;
         }
         .range-slider::-webkit-slider-thumb:hover {
           transform: scale(1.1);
+        }
+        .range-slider-wrapper:active .range-slider::-webkit-slider-thumb {
+          transition: transform 0.1s ease, box-shadow 0.1s ease;
         }
         .range-slider::-moz-range-track { 
           height: 6px; 
@@ -698,18 +944,66 @@ export default function FilterDrawer({ open, onClose, inline = false, sticky = f
           border: none; 
         }
         .range-slider::-moz-range-thumb { 
-          height: 18px; 
-          width: 18px; 
-          background: #0082FF; 
+          height: 20px; 
+          width: 20px; 
+          background: radial-gradient(circle, #fff 30%, #0082FF 30%);
           border-radius: 50%; 
           cursor: pointer; 
-          border: 2px solid #fff; 
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-          transition: transform 0.15s ease, box-shadow 0.15s ease;
-          pointer-events: auto; /* Keep thumbs clickable even when track is disabled */
+          border: 3px solid #fff; 
+          box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+          transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+          pointer-events: auto;
         }
         .range-slider::-moz-range-thumb:hover {
           transform: scale(1.1);
+        }
+        .range-slider-wrapper:active .range-slider::-moz-range-thumb {
+          transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+        .range-tooltip {
+          position: absolute;
+          top: -36px;
+          background: #222;
+          color: #fff;
+          padding: 6px 10px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 500;
+          white-space: nowrap;
+          pointer-events: none;
+          z-index: 10;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        .range-tooltip::after {
+          content: '';
+          position: absolute;
+          bottom: -8px;
+          left: 50%;
+          margin-left: -4px;
+          border-width: 4px;
+          border-style: solid;
+          border-color: #222 transparent transparent transparent;
+        }
+        .range-tooltip-min {
+          transform: translateX(-50%);
+        }
+        .range-tooltip-min.tooltip-left {
+          transform: translateX(0);
+        }
+        .range-tooltip-min.tooltip-left::after {
+          left: 20px;
+          margin-left: 0;
+        }
+        .range-tooltip-max {
+          transform: translateX(-50%);
+        }
+        .range-tooltip-max.tooltip-right {
+          transform: translateX(-100%);
+        }
+        .range-tooltip-max.tooltip-right::after {
+          left: auto;
+          right: 20px;
+          margin-left: 0;
         }
         .min-slider { 
           z-index: 3; 

@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, Fragment } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import styles from './orders.module.css'
@@ -100,40 +100,51 @@ export default function Orders({ orders }) {
       .join(' ') + ' Discount';
   };
 
-  // Calculate discounted price and discount amount for an item when discountType is gig_completion
+  // Calculate discounted price and discount amount for an item.
+  // Only show product-level discount (discountName, discountAmount or discountPercentage).
+  // Do NOT display order-level gig_completion near products - only show offers/coupons when present on the product.
   const getItemPriceDetails = (item, order) => {
     const basePrice = Number(item?.unitPrice ?? item?.price ?? 0) || 0;
-    
-    // If discountType is gig_completion, calculate discounted price
-    if (order?.discountType === 'gig_completion' && order?.discount > 0) {
-      const totalDiscount = Number(order.discount) || 0;
-      const orderSubtotal = getItemsSubtotal(order);
-      
-      if (orderSubtotal > 0) {
-        // Calculate discount proportion for this item
-        const itemTotal = basePrice * (Number(item?.quantity) || 1);
-        const discountProportion = itemTotal / orderSubtotal;
-        const itemDiscount = totalDiscount * discountProportion;
-        const discountPerUnit = itemDiscount / (Number(item?.quantity) || 1);
-        const discountedPrice = basePrice - discountPerUnit;
-        const discountPercentage = basePrice > 0 ? ((discountPerUnit / basePrice) * 100) : 0;
-        
-        return {
-          originalPrice: basePrice,
-          discountAmount: Number(discountPerUnit.toFixed(2)),
-          discountedPrice: Math.max(0, Number(discountedPrice.toFixed(2))),
-          discountPercentage: Number(discountPercentage.toFixed(2)),
-          discountType: order.discountType
-        };
+    const qty = Math.max(1, Number(item?.quantity) || 1);
+
+    // Product-level discount only: item has discountName and either discountAmount or discountPercentage.
+    // Never display gig_completion - exclude when discountName indicates gig completion (e.g. "Gig Completion").
+    const isGigCompletionDiscount = item?.discountName && /gig\s*completion|completion\s*discount/i.test(String(item.discountName));
+    const hasItemDiscount = !isGigCompletionDiscount && item?.discountName && (Number(item?.discountAmount) > 0 || Number(item?.discountPercentage) > 0);
+    if (hasItemDiscount) {
+      let discountPerUnit = 0;
+      let discountPercentage = 0;
+
+      if (Number(item.discountPercentage) > 0) {
+        // Discount is percentage: discountPerUnit = basePrice * (percentage / 100)
+        discountPercentage = Number(item.discountPercentage);
+        discountPerUnit = (basePrice * discountPercentage) / 100;
+      } else if (Number(item.discountAmount) > 0) {
+        // Discount is fixed amount per unit
+        discountPerUnit = Number(item.discountAmount);
+        discountPercentage = basePrice > 0 ? (discountPerUnit / basePrice) * 100 : 0;
       }
+
+      const discountedPrice = Math.max(0, basePrice - discountPerUnit);
+
+      return {
+        originalPrice: basePrice,
+        discountAmount: Number(discountPerUnit.toFixed(2)),
+        discountedPrice: Number(discountedPrice.toFixed(2)),
+        discountPercentage: Number(discountPercentage.toFixed(2)),
+        discountType: null,
+        discountName: item.discountName
+      };
     }
-    
+
+    // No product-level discount - do not display any discount (including gig_completion)
     return {
       originalPrice: basePrice,
       discountAmount: 0,
       discountedPrice: basePrice,
       discountPercentage: 0,
-      discountType: null
+      discountType: null,
+      discountName: null
     };
   };
 
@@ -401,8 +412,9 @@ export default function Orders({ orders }) {
           
           // Multiple orders - render each order separately
           return (
-            <>
-              {group.map((order) => {
+            <Fragment key={groupId}>
+              {group.map((order, orderIndex) => {
+                const orderKey = order._id || order.orderNumber || `order-${groupIndex}-${orderIndex}`
                 const orderItems = order.items || []
                 const firstItem = orderItems[0]
                 const totalProducts = getTotalProductsCount(order)
@@ -410,7 +422,7 @@ export default function Orders({ orders }) {
                 
                 if (orderItems.length === 0) {
                   return (
-                    <div key={order._id} className={styles.orderItem}>
+                    <div key={orderKey} className={styles.orderItem}>
                       <div className={styles.orderInfoSection}>
                         <div className={styles.orderRow}>
                           <div className={styles.orderStatus}>{order.status}</div>
@@ -444,7 +456,7 @@ export default function Orders({ orders }) {
                 }
                 
                 return (
-                  <div key={order._id} className={styles.orderGroup}>
+                  <div key={orderKey} className={styles.orderGroup}>
                     <div className={styles.orderItem}>
                       <div className={styles.orderImageSection}>
                         {firstItem ? (
@@ -485,15 +497,15 @@ export default function Orders({ orders }) {
                             onClick={(e) => handleProductsClick(order, e)}
                             style={{ cursor: 'pointer' }}
                           >
-                            Products
-                          </span> : <span className={styles.productsNumber}>{productCount}</span>
+                          Products
+                        </span> : <span className={styles.productsNumber}>{productCount}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                 )
               })}
-            </>
+            </Fragment>
           )
         })}
         </div>
@@ -537,8 +549,13 @@ export default function Orders({ orders }) {
                       <div className={orderHistoryStyles.productNumber}>#{index + 1}</div>
                       {(() => {
                         const priceDetails = getItemPriceDetails(item, selectedOrder);
-                        const hasDiscount = priceDetails.discountAmount > 0;
-                        
+                        const hasDiscount = priceDetails.discountAmount > 0 && priceDetails.discountType !== 'gig_completion';
+                        const discountLabel = priceDetails.discountName
+                          ? `${priceDetails.discountName} (${priceDetails.discountPercentage}% OFF)`
+                          : priceDetails.discountType
+                            ? `${formatDiscountType(priceDetails.discountType)} (${priceDetails.discountPercentage}% OFF)`
+                            : `${priceDetails.discountPercentage}% OFF`;
+
                         return (
                           <div className={orderHistoryStyles.productPriceContainer}>
                             {hasDiscount ? (
@@ -547,7 +564,7 @@ export default function Orders({ orders }) {
                                   AED {priceDetails.originalPrice.toFixed(2)}
                                 </p>
                                 <p className={orderHistoryStyles.discountType}>
-                                  {formatDiscountType(priceDetails.discountType)} ({priceDetails.discountPercentage}% OFF)
+                                  {discountLabel}
                                 </p>
                                 <p className={orderHistoryStyles.discountAmount}>
                                   - AED {priceDetails.discountAmount.toFixed(2)}

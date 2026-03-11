@@ -92,13 +92,20 @@ export default function OtherSellersDrawer({ open, onClose, productId }) {
             try {
                 const userId = await getUserFromCookies();
                 
+                const parsedPrice = typeof seller.price === 'string' ? Number(String(seller.price).replace(/[^0-9.]/g, '')) : seller.price;
+                const priceWithVat = seller.price_with_vat ?? seller.originalPrice ?? parsedPrice;
+                const discountPriceWithVat = seller.discount_price_with_vat ?? seller.discountPrice;
+                const effectiveVat = (discountPriceWithVat != null && Number(discountPriceWithVat) > 0) ? discountPriceWithVat : priceWithVat;
+                const dVat = (discountPriceWithVat != null && Number(discountPriceWithVat) > 0) ? discountPriceWithVat : effectiveVat;
                 const cartItem = {
                     userId,
                     productId: seller.id,
                     name: seller.title,
-                    price: typeof seller.price === 'string' ? Number(String(seller.price).replace(/[^0-9.]/g, '')) : seller.price,
+                    price: effectiveVat,
                     quantity: 1,
-                    image: seller.image
+                    image: seller.image,
+                    price_with_vat: priceWithVat,
+                    discount_price_with_vat: dVat
                 };
                 
                 console.log('🛒 Adding to cart:', cartItem);

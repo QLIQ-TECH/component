@@ -35,19 +35,23 @@ const transformProductData = (apiProduct) => {
   // Use placeholder image if no valid image URL
   const imageUrl = primaryImage?.url || 'https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644';
 
-  // Calculate savings for offer badge
-  const savings = apiProduct.is_offer && apiProduct.price && apiProduct.discount_price
-    ? apiProduct.price - apiProduct.discount_price
+  const priceWithVat = apiProduct.price_with_vat ?? apiProduct.price
+  const discountPriceWithVat = apiProduct.discount_price_with_vat ?? apiProduct.discount_price
+  const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
+  const savings = apiProduct.is_offer && priceWithVat != null && discountPriceWithVat != null && discountPriceWithVat > 0
+    ? priceWithVat - discountPriceWithVat
     : 0;
 
   return {
     id: apiProduct._id || apiProduct.slug,
     title: apiProduct.title || 'Product Title',
-    price: `AED ${apiProduct.discount_price || apiProduct.price || '0'}`,
+    price: `AED ${effectivePrice ?? '0'}`,
     rating: apiProduct.average_rating?.toString() || '0',
     deliveryTime: '30 Min', // Default delivery time since it's not in API
     image: imageUrl,
-    badge: apiProduct.is_offer && savings > 0 ? `Save AED ${savings}` : null
+    badge: apiProduct.is_offer && savings > 0 ? `Save AED ${savings}` : null,
+    priceWithVat: priceWithVat != null ? Number(priceWithVat) : undefined,
+    discountPriceWithVat: discountPriceWithVat != null && Number(discountPriceWithVat) > 0 ? Number(discountPriceWithVat) : undefined
   }
 }
 
@@ -357,8 +361,8 @@ export default function Home() {
               showNavigation={true}
               onPrev={handleBestsellersPrev}
               onNext={handleBestsellersNext}
-              prevDisabled={bestsellersNav.isBeginning}
-              nextDisabled={bestsellersNav.isEnd}
+              prevDisabled={bestsellersNav.isBeginning || displayBestsellers.length === 0}
+              nextDisabled={bestsellersNav.isEnd || displayBestsellers.length === 0}
             />
             {loading ? (
               <div style={{ textAlign: 'center', padding: '20px' }}>
@@ -408,8 +412,8 @@ export default function Home() {
               showNavigation={true}
               onPrev={handleCategoriesPrev}
               onNext={handleCategoriesNext}
-              prevDisabled={categoriesNav.isBeginning}
-              nextDisabled={categoriesNav.isEnd}
+              prevDisabled={categoriesNav.isBeginning || transformedCategories.length === 0}
+              nextDisabled={categoriesNav.isEnd || transformedCategories.length === 0}
             />
             {categoriesLoading ? (
               <div style={{ textAlign: 'center', padding: '20px' }}>
@@ -459,8 +463,8 @@ export default function Home() {
               showNavigation={true}
               onPrev={handleOffersPrev}
               onNext={handleOffersNext}
-              prevDisabled={offersNav.isBeginning}
-              nextDisabled={offersNav.isEnd}
+              prevDisabled={offersNav.isBeginning || transformedOffers.length === 0}
+              nextDisabled={offersNav.isEnd || transformedOffers.length === 0}
             />
             <Swiper
               ref={offersSwiperRef}
@@ -529,8 +533,8 @@ export default function Home() {
               showNavigation={true}
               onPrev={handleTopBrandsPrev}
               onNext={handleTopBrandsNext}
-              prevDisabled={topBrandsNav.isBeginning}
-              nextDisabled={topBrandsNav.isEnd}
+              prevDisabled={topBrandsNav.isBeginning || transformedBrands.length === 0}
+              nextDisabled={topBrandsNav.isEnd || transformedBrands.length === 0}
             />
             {brandsLoading ? (
               <div style={{ textAlign: 'center', padding: '20px' }}>
@@ -581,8 +585,8 @@ export default function Home() {
               showButton={false}
               onPrev={handleFeaturedOffersPrev}
               onNext={handleFeaturedOffersNext}
-              prevDisabled={featuredOffersNav.isBeginning}
-              nextDisabled={featuredOffersNav.isEnd}
+              prevDisabled={featuredOffersNav.isBeginning || transformedFeaturedOffers.length === 0}
+              nextDisabled={featuredOffersNav.isEnd || transformedFeaturedOffers.length === 0}
             />
             <Swiper
               ref={featuredOffersSwiperRef}
@@ -660,8 +664,8 @@ export default function Home() {
               showNavigation={true}
               onPrev={handleLevel3CategoriesPrev}
               onNext={handleLevel3CategoriesNext}
-              prevDisabled={level3CategoriesNav.isBeginning}
-              nextDisabled={level3CategoriesNav.isEnd}
+              prevDisabled={level3CategoriesNav.isBeginning || transformedLevel3Categories.length === 0}
+              nextDisabled={level3CategoriesNav.isEnd || transformedLevel3Categories.length === 0}
             />
             {categoriesLoading ? (
               <div style={{ textAlign: 'center', padding: '20px' }}>

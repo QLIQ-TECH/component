@@ -41,8 +41,8 @@ export default function HypermarketCard() {
   };
 
   // Use the appropriate stores based on the current page
-  const stores = isSupermarketPage 
-    ? supermarketStores 
+  const stores = isSupermarketPage
+    ? supermarketStores
     : (isHypermarketPage ? hypermarketStores : (supermarketStores && supermarketStores.length > 0 ? supermarketStores : hypermarketStores));
 
   return (
@@ -77,7 +77,7 @@ export default function HypermarketCard() {
                   <div className="hypermarket-card-wrapper">
                     <div className="hypermarket-card" onClick={() => handleStoreClick(store)}>
                       <Image
-                        src={ store.logo || '/iphone.jpg'}
+                        src={store.logo || '/iphone.jpg'}
                         alt={store.name || 'Store'}
                         width={160}
                         height={160}

@@ -1,10 +1,9 @@
 'use client'
 import { useState, useEffect } from 'react'
-import styles from './qoynsHistory.module.css'
+import styles from './cashWalletHistory.module.css'
 import { wallet } from '@/store/api/endpoints'
 import { decryptText } from '@/utils/crypto'
 
-// Helper function to get auth token
 const getToken = async () => {
   let token = ''
   if (typeof document !== 'undefined') {
@@ -22,7 +21,6 @@ const getToken = async () => {
   return token
 }
 
-// Format date to display format
 const formatDate = (dateString) => {
   try {
     const date = new Date(dateString)
@@ -33,34 +31,50 @@ const formatDate = (dateString) => {
     const minutes = date.getMinutes().toString().padStart(2, '0')
     const ampm = hours >= 12 ? 'pm' : 'am'
     const displayHours = hours % 12 || 12
-    
     return `${day} ${month} ${year}, ${displayHours}:${minutes} ${ampm}`
   } catch (error) {
     return dateString
   }
 }
 
-export default function QoynsHistory() {
+const formatStatus = (status) => {
+  if (!status) return 'Transaction'
+  return String(status).charAt(0).toUpperCase() + String(status).slice(1).toLowerCase()
+}
+
+const formatAmount = (item) => {
+  const amount = typeof item.amount === 'number' ? item.amount : parseFloat(item.amount) || 0
+  const displayAmount = Math.abs(amount).toFixed(2)
+  return `- AED ${displayAmount}`
+}
+
+export default function CashWalletHistory() {
   const [historyData, setHistoryData] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [page, setPage] = useState(1)
+  const limit = 50
 
   useEffect(() => {
-    const fetchRedeemHistory = async () => {
+    const fetchCashHistory = async () => {
       try {
         setLoading(true)
         setError(null)
-        
+
         const token = await getToken()
         if (!token) {
           throw new Error('No authentication token found')
         }
 
-        const response = await fetch(wallet.redeemHistory, {
+        const url = typeof wallet.cashHistory === 'function'
+          ? wallet.cashHistory(page, limit)
+          : `${wallet.base}/wallet/user/cash-history?page=${page}&limit=${limit}`
+
+        const response = await fetch(url, {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
-          }
+          },
         })
 
         if (!response.ok) {
@@ -69,14 +83,14 @@ export default function QoynsHistory() {
         }
 
         const result = await response.json()
-        
-        if (result.success && result.data) {
-          setHistoryData(result.data)
+
+        if (result.success && result.data && Array.isArray(result.data.transactions)) {
+          setHistoryData(result.data.transactions)
         } else {
           setHistoryData([])
         }
       } catch (err) {
-        console.error('Error fetching redeem history:', err)
+        console.error('Error fetching cash wallet history:', err)
         setError(err.message)
         setHistoryData([])
       } finally {
@@ -84,8 +98,8 @@ export default function QoynsHistory() {
       }
     }
 
-    fetchRedeemHistory()
-  }, [])
+    fetchCashHistory()
+  }, [page])
 
   if (loading) {
     return (
@@ -111,7 +125,7 @@ export default function QoynsHistory() {
     return (
       <div className={styles.historyList}>
         <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-          No redeem history found
+          No cash wallet history found
         </div>
       </div>
     )
@@ -129,11 +143,11 @@ export default function QoynsHistory() {
               </svg>
             </div>
             <div>
-              <div className={styles.name}>{item.orderId || 'N/A'}</div>
+              <div className={styles.name}>{formatStatus(item.status)}</div>
               <div className={styles.date}>{formatDate(item.date)}</div>
             </div>
           </div>
-          <div className={styles.amount}>Q {item.amount?.toLocaleString() || 0}</div>
+          <div className={styles.amount}>{formatAmount(item)}</div>
         </div>
       ))}
     </div>

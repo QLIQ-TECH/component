@@ -17,7 +17,7 @@ import { fetchProductsByStoreSlug, fetchHypermarketProducts, fetchSupermarketPro
 import { catalog } from '@/store/api/endpoints'
 import { ProductCardSkeleton, CategoryCardSkeleton } from '@/components/SkeletonLoader'
 
-// Helper function to transform API product data to match ProductCard component format
+// Helper function to transform API product data to match ProductCard component format (VAT-inclusive prices)
 const transformProductData = (apiProduct) => {
   // Get the primary image or first available image
   const primaryImage = apiProduct.images?.find(img => img.is_primary) || apiProduct.images?.[0];
@@ -25,9 +25,11 @@ const transformProductData = (apiProduct) => {
   // Use placeholder image if no valid image URL
   const imageUrl = primaryImage?.url || 'https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644';
 
-  // Calculate savings for offer badge
-  const savings = apiProduct.is_offer && apiProduct.price && apiProduct.discount_price
-    ? apiProduct.price - apiProduct.discount_price
+  const priceWithVat = apiProduct.price_with_vat ?? apiProduct.price
+  const discountPriceWithVat = apiProduct.discount_price_with_vat ?? apiProduct.discount_price
+  const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
+  const savings = apiProduct.is_offer && priceWithVat != null && discountPriceWithVat != null && discountPriceWithVat > 0
+    ? priceWithVat - discountPriceWithVat
     : 0;
 
   // For cheap deals, show discount percentage if available
@@ -41,11 +43,13 @@ const transformProductData = (apiProduct) => {
   return {
     id: apiProduct._id || apiProduct.slug,
     title: apiProduct.title || 'Product Title',
-    price: `AED ${apiProduct.discount_price || apiProduct.price || '0'}`,
+    price: `AED ${effectivePrice ?? '0'}`,
     rating: apiProduct.average_rating?.toString() || '0',
     deliveryTime: '30 Min', // Default delivery time since it's not in API
     image: imageUrl,
-    badge: badge
+    badge: badge,
+    priceWithVat: priceWithVat != null ? Number(priceWithVat) : undefined,
+    discountPriceWithVat: discountPriceWithVat != null && Number(discountPriceWithVat) > 0 ? Number(discountPriceWithVat) : undefined
   }
 }
 
@@ -84,40 +88,6 @@ const transformCategoryData = (apiCategory) => {
 }
 
 // Static product data for fallback
-const productData = [
-  {
-    id: "nike-airforce-01",
-    title: "Vorem ipsum dolor sit amet, consectetur adipiscing elit.",
-    price: "AED 1,600",
-    rating: "4.0",
-    deliveryTime: "30 Min",
-    image: "https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644"
-  },
-  {
-    id: "nike-dunk-low",
-    title: "Vorem ipsum dolor sit amet, consectetur adipiscing elit.",
-    price: "AED 1,600",
-    rating: "4.0",
-    deliveryTime: "30 Min",
-    image: "https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644"
-  },
-  {
-    id: "nike-air-max",
-    title: "Vorem ipsum dolor sit amet, consectetur adipiscing elit.",
-    price: "AED 1,600",
-    rating: "4.0",
-    deliveryTime: "30 Min",
-    image: "https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644"
-  },
-  {
-    id: "nike-airforce-01-black",
-    title: "Vorem ipsum dolor sit amet, consectetur adipiscing elit.",
-    price: "AED 1,600",
-    rating: "4.0",
-    deliveryTime: "30 Min",
-    image: "https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644"
-  }
-]
 
 export default function CategoryPage() {
   const router = useRouter()
@@ -128,6 +98,7 @@ export default function CategoryPage() {
   const source = searchParams?.get('source') || null
 
   const { categoryChildren, hypermarketLevel2Categories, supermarketLevel2Categories, storeLevel2Categories, loading, error } = useSelector(state => state.categories)
+  const loadingMoreCategories = useRef(false)
   const { 
     storeSlugProducts, 
     storeSlugProductsLoading, 
@@ -192,7 +163,14 @@ export default function CategoryPage() {
   // For /category/[slug] pages, fetch appropriate API based on source
   useEffect(() => {
     if (slug) {
+      // Clear all data immediately when slug or source changes to prevent showing stale data
       setIsStoreSlug(false)
+      setCategoryInfo(null)
+      setStoreId(null)
+      dispatch(clearStoreSlugProducts())
+      dispatch(clearHypermarketProducts())
+      dispatch(clearSupermarketProducts())
+      dispatch(clearStoreProductsByStoreId())
       
       // Check source query parameter to determine which API to call
       if (source === 'hypermarket') {
@@ -262,12 +240,12 @@ export default function CategoryPage() {
         // Also fetch store level2 categories
         dispatch(fetchStoreLevel2Categories())
       } else {
-        // From discovery page or no source - call category children API (default behavior)
-        dispatch(fetchCategoryChildren(slug))
-        // Also fetch hypermarket and supermarket level 2 categories for the "Other Categories" section
+        // From discovery page or no source - also fetch hypermarket and supermarket level 2 categories
         dispatch(fetchHypermarketLevel2Categories())
         dispatch(fetchSupermarketLevel2Categories())
       }
+      // Fetch all category children in one go (limit 50) so 11th, 12th etc. display immediately in slider
+      dispatch(fetchCategoryChildren({ slug, page: 1, limit: 50 }))
     }
 
     // Cleanup on unmount
@@ -315,6 +293,18 @@ export default function CategoryPage() {
       setCategoryInfo(categoryChildren.data.category)
     }
   }, [categoryChildren, isStoreSlug])
+
+  // Clear load-more lock when category children pagination updates (so we can fetch next page again)
+  useEffect(() => {
+    if (categoryChildren?.data?.pagination) {
+      loadingMoreCategories.current = false
+    }
+  }, [categoryChildren?.data?.pagination?.page])
+
+  // Reset load-more ref when slug changes so new category can load more pages
+  useEffect(() => {
+    loadingMoreCategories.current = false
+  }, [slug])
 
   // Transform API data - prioritize hypermarket, then supermarket, then store products, then store slug, then category children
   const getProductsForSection = (sectionName) => {
@@ -387,7 +377,13 @@ export default function CategoryPage() {
     || '/2.jpg'
   
   // Use appropriate categories based on source
+  // Return empty array while loading to prevent showing stale data
   const categoriesToDisplay = (() => {
+    // If loading, return empty array to prevent showing stale categories
+    if (isLoading) {
+      return []
+    }
+    
     if (source === 'hypermarket' && hypermarketLevel2Categories && hypermarketLevel2Categories.length > 0) {
       return hypermarketLevel2Categories.map(transformCategoryData)
     } else if (source === 'supermarket' && supermarketLevel2Categories && supermarketLevel2Categories.length > 0) {
@@ -522,9 +518,9 @@ export default function CategoryPage() {
                 <div className="banner-title">
                   {categoryInfo?.name || hypermarketProducts?.store?.name || supermarketProducts?.store?.name || storeProductsByStoreId?.store?.name || storeSlugProducts?.store?.name || slug?.toUpperCase() || 'CATEGORY'}
                 </div>
-                <div className="banner-desc">
+                {/* <div className="banner-desc">
                   {categoryInfo?.description || hypermarketProducts?.store?.description || supermarketProducts?.store?.description || storeProductsByStoreId?.store?.description || storeSlugProducts?.store?.description || 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc vulputate libero et velit interdum, ac aliquet odio mattis.'}
-                </div>
+                </div> */}
               </div>
               {/* <button className="banner-follow-btn">Follow</button> */}
             </div>
@@ -563,9 +559,23 @@ export default function CategoryPage() {
               freeMode={true}
               onSlideChange={(swiper) => {
                 setOtherCategoriesNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                // Load more only when category has 50+ children and user slides near end
+                const useCategoryChildren = !source || !['hypermarket', 'supermarket', 'store'].includes(source)
+                const pagination = categoryChildren?.data?.pagination
+                if (useCategoryChildren && categoryChildren?.data?.level4Categories && pagination?.hasNext && !loadingMoreCategories.current && swiper.activeIndex >= 40) {
+                  loadingMoreCategories.current = true
+                  dispatch(fetchCategoryChildren({ slug, page: (pagination.page ?? 1) + 1, limit: 50 }))
+                }
               }}
               onReachEnd={(swiper) => {
                 setOtherCategoriesNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                // Load next page only when category has 50+ children
+                const useCategoryChildren = !source || !['hypermarket', 'supermarket', 'store'].includes(source)
+                const pagination = categoryChildren?.data?.pagination
+                if (useCategoryChildren && categoryChildren?.data?.level4Categories && pagination?.hasNext && !loadingMoreCategories.current) {
+                  loadingMoreCategories.current = true
+                  dispatch(fetchCategoryChildren({ slug, page: (pagination.page ?? 1) + 1, limit: 50 }))
+                }
               }}
               onReachBeginning={(swiper) => {
                 setOtherCategoriesNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
@@ -576,7 +586,7 @@ export default function CategoryPage() {
               className="other-categories-swiper"
             >
               {transformedCategories.map((category, index) => (
-                <SwiperSlide key={category.name || index} style={{ width: 'auto' }}>
+                <SwiperSlide key={category.id || category.slug || category.name || index} style={{ width: 'auto' }}>
                   <CategoryCard {...category} onClick={() => handleCategoryClick(category)} />
                 </SwiperSlide>
               ))}
@@ -632,7 +642,7 @@ export default function CategoryPage() {
                 setBestsellersNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
               }}
             >
-              {(transformedBestsellers.length > 0 ? transformedBestsellers : allStoreProducts.slice(0, 20)).map((product, index) => (
+              {(transformedBestsellers.length > 0 ? transformedBestsellers : allStoreProducts.slice(0, 21)).map((product, index) => (
                 <SwiperSlide key={product.id || index} style={{ width: 'auto' }}>
                   <ProductCard {...product} />
                 </SwiperSlide>
@@ -732,7 +742,7 @@ export default function CategoryPage() {
                 setOffersNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
               }}
             >
-              {(transformedOffers.length > 0 ? transformedOffers : allStoreProducts.slice(20, 40)).map((product, index) => (
+              {(transformedOffers.length > 0 ? transformedOffers : allStoreProducts.slice(21, 42)).map((product, index) => (
                 <SwiperSlide key={product.id || index} style={{ width: 'auto' }}>
                   <ProductCard {...product} />
                 </SwiperSlide>
@@ -916,7 +926,7 @@ export default function CategoryPage() {
           .banner-content {
             flex-direction: column;
             align-items: flex-start;
-            padding: 0 24px 24px 24px;
+            padding: 44px 24px 24px 24px;
           }
           
           .banner-back-btn {

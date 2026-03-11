@@ -80,7 +80,7 @@ export default function ImageSlider() {
             ref={swiperRef}
             modules={[Navigation]}
             spaceBetween={isMobile ? 16 : 24}
-            slidesPerView={isMobile ? 1.2 : 2}
+            slidesPerView={isMobile ? 1.2 : 1.5}
             centeredSlides={isMobile}
             loop={false}
             onSlideChange={handleSlideChange}
@@ -105,7 +105,7 @@ export default function ImageSlider() {
                       borderRadius: isMobile ? '12px' : '16px',
                       width: '100%',
                       height: '100%',
-                      objectFit: 'cover'
+                      objectFit: 'contain'
                     }}
                     className="slider-image"
                   />
@@ -116,9 +116,9 @@ export default function ImageSlider() {
 
           <div className="slider-controls">
             <button
-              className={`nav-button prev ${isBeginning ? 'disabled' : ''}`}
+              className={`nav-button prev ${isBeginning || slides.length === 0 ? 'disabled' : ''}`}
               onClick={prevSlide}
-              disabled={isBeginning}
+              disabled={isBeginning || slides.length === 0}
               aria-label="Previous slide"
             >
               <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
@@ -128,9 +128,9 @@ export default function ImageSlider() {
             </button>
 
             <button
-              className={`nav-button next ${isEnd ? 'disabled' : ''}`}
+              className={`nav-button next ${isEnd || slides.length === 0 ? 'disabled' : ''}`}
               onClick={nextSlide}
-              disabled={isEnd}
+              disabled={isEnd || slides.length === 0}
               aria-label="Next slide"
             >
               <svg width="44" height="44" viewBox="0 0 44 44" fill="none">

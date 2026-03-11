@@ -6,7 +6,7 @@ import SectionHeader from '@/components/SectionHeader'
 import Footer from '@/components/Footer'
 import FilterDrawer from '@/components/FilterDrawer'
 import SortDropdown from '@/components/SortDropdown'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useSearchParams } from 'next/navigation'
 import { searchProducts } from '@/store/slices/productsSlice'
@@ -14,7 +14,7 @@ import { buildFacetsFromProducts } from '@/utils/facets'
 import { buildFacetsFromSearchFilters } from '@/utils/searchFilters'
 import { search } from '@/store/api/endpoints'
 
-// Helper function to transform API product data to match ProductCard component format
+// Helper function to transform API product data to match ProductCard component format (VAT-inclusive prices)
 const transformProductData = (apiProduct) => {
   // Get the primary image or first available image
   const primaryImage = apiProduct.images?.find(img => img.is_primary) || apiProduct.images?.[0];
@@ -22,19 +22,23 @@ const transformProductData = (apiProduct) => {
   // Use placeholder image if no valid image URL
   const imageUrl = primaryImage?.url || 'https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644';
 
-  // Calculate savings for offer badge
-  const savings = apiProduct.is_offer && apiProduct.price && apiProduct.discount_price
-    ? apiProduct.price - apiProduct.discount_price
+  const priceWithVat = apiProduct.price_with_vat ?? apiProduct.price
+  const discountPriceWithVat = apiProduct.discount_price_with_vat ?? apiProduct.discount_price
+  const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
+  const savings = apiProduct.is_offer && priceWithVat != null && discountPriceWithVat != null && discountPriceWithVat > 0
+    ? priceWithVat - discountPriceWithVat
     : 0;
 
   return {
     id: apiProduct._id || apiProduct.slug,
     title: apiProduct.title || 'Product Title',
-    price: `AED ${apiProduct.discount_price || apiProduct.price || '0'}`,
+    price: `AED ${effectivePrice ?? '0'}`,
     rating: apiProduct.average_rating?.toString() || '0',
     deliveryTime: '30 Min', // Default delivery time since it's not in API
     image: imageUrl,
-    badge: apiProduct.is_offer && savings > 0 ? `Save AED ${savings}` : null
+    badge: apiProduct.is_offer && savings > 0 ? `Save AED ${savings}` : null,
+    priceWithVat: priceWithVat != null ? Number(priceWithVat) : undefined,
+    discountPriceWithVat: discountPriceWithVat != null && Number(discountPriceWithVat) > 0 ? Number(discountPriceWithVat) : undefined
   }
 }
 
@@ -51,12 +55,30 @@ export default function SearchPage() {
   
   const { searchResults, searchQuery, searchLoading, searchError, searchPagination } = useSelector(state => state.products)
   const [currentPage, setCurrentPage] = useState(1)
-  const pageSize = 20
+  const pageSize = 21
+  const productsScrollContainerRef = useRef(null)
 
+  // Reset to page 1 and clear price filter when query changes (price range will be different)
   useEffect(() => {
     setCurrentPage(1)
-  }, [query, searchResults])
+    // When query changes, clear price filter since the range will be different
+    if (query) {
+      setSelectedFilters(prev => {
+        const newFilters = { ...prev }
+        if (newFilters.price) {
+          delete newFilters.price
+        }
+        return newFilters
+      })
+    }
+  }, [query])
+  
+  // Reset to page 1 when filters or sort change (but not query)
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedFilters, sortBy])
 
+  // Use pagination info from API response (server-side pagination like categories)
   const totalResults = useMemo(() => {
     if (typeof searchPagination?.total === 'number') {
       return searchPagination.total
@@ -65,31 +87,109 @@ export default function SearchPage() {
   }, [searchResults, searchPagination?.total])
 
   const totalPages = useMemo(() => {
-    if (!totalResults) {
-      return 1
+    // Use pagination.pages if available (like categories do)
+    if (searchPagination?.pages) {
+      return Math.max(1, searchPagination.pages)
     }
-    return Math.max(1, Math.ceil(totalResults / pageSize))
-  }, [totalResults, pageSize])
+    // Fallback to totalPages if available
+    if (searchPagination?.totalPages) {
+      return Math.max(1, searchPagination.totalPages)
+    }
+    // Calculate from total if available
+    if (searchPagination?.total) {
+      return Math.max(1, Math.ceil(searchPagination.total / pageSize))
+    }
+    return 1
+  }, [searchPagination, pageSize])
 
-  const paginatedResults = useMemo(() => {
+  // Use searchResults; when sorting by price, sort by discounted price with VAT (effective price) on the frontend
+  const displayResults = useMemo(() => {
     if (!Array.isArray(searchResults)) {
       return []
     }
+    const getEffectivePriceWithVat = (p) => {
+      const discountWithVat = p.discount_price_with_vat != null && Number(p.discount_price_with_vat) > 0 ? Number(p.discount_price_with_vat) : null
+      if (discountWithVat !== null) return discountWithVat
+      const priceWithVat = p.price_with_vat != null ? Number(p.price_with_vat) : null
+      return priceWithVat !== null ? priceWithVat : (Number(p.price) || 0)
+    }
+    if (sortBy === 'price_asc' || sortBy === 'price_desc') {
+      return [...searchResults].sort((a, b) => {
+        const pa = getEffectivePriceWithVat(a)
+        const pb = getEffectivePriceWithVat(b)
+        return sortBy === 'price_asc' ? pa - pb : pb - pa
+      })
+    }
+    return searchResults
+  }, [searchResults, sortBy])
 
-    const start = (currentPage - 1) * pageSize
-    return searchResults.slice(start, start + pageSize)
-  }, [searchResults, currentPage, pageSize])
+  // Calculate the range of products displayed on current page
+  const productRange = useMemo(() => {
+    if (totalResults === 0 || displayResults.length === 0) {
+      return { start: 0, end: 0 }
+    }
+    const start = (currentPage - 1) * pageSize + 1
+    const end = Math.min(currentPage * pageSize, totalResults)
+    return { start, end }
+  }, [currentPage, pageSize, totalResults, displayResults.length])
 
   const pageNumbers = useMemo(() => {
-    return Array.from({ length: totalPages }, (_, index) => index + 1)
-  }, [totalPages])
+    // Show only 3 buttons at a time with sliding window (like categories)
+    if (totalPages <= 3) {
+      // If total pages is 3 or less, show all
+      return Array.from({ length: totalPages }, (_, index) => index + 1)
+    }
+    
+    // Calculate which 3 pages to show based on current page
+    let startPage
+    
+    if (currentPage === 1) {
+      // Show pages 1, 2, 3
+      startPage = 1
+    } else if (currentPage === totalPages) {
+      // Show last 3 pages
+      startPage = Math.max(1, totalPages - 2)
+    } else {
+      // Show current page and one on each side
+      startPage = Math.min(currentPage - 1, totalPages - 2)
+    }
+    
+    // Generate the 3 page numbers
+    const pages = []
+    for (let i = 0; i < 3 && (startPage + i) <= totalPages; i++) {
+      pages.push(startPage + i)
+    }
+    
+    return pages
+  }, [totalPages, currentPage])
 
   const handlePageChange = (page) => {
     if (page < 1 || page > totalPages || page === currentPage) {
       return
     }
     setCurrentPage(page)
+    // Scroll window to top immediately when page changes (like categories)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    // Scroll the products container to top as well
+    if (productsScrollContainerRef.current) {
+      productsScrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+    }
   }
+
+  // Scroll to top when page changes and after products load (like categories)
+  useEffect(() => {
+    if (!searchLoading && displayResults.length > 0) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        // Scroll window to top
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        // Scroll the products container to top
+        if (productsScrollContainerRef.current) {
+          productsScrollContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+      }, 100)
+    }
+  }, [currentPage, searchLoading, displayResults.length])
 
   const handlePreviousPage = () => handlePageChange(currentPage - 1)
   const handleNextPage = () => handlePageChange(currentPage + 1)
@@ -104,12 +204,49 @@ export default function SearchPage() {
   }, [selectedFilters])
 
   // Fetch filter data when query or debounced filters change
+  // Use a ref to cache filterData by query+filter key to prevent unnecessary resets
+  const filterDataCacheRef = useRef(new Map())
+  const previousQueryRef = useRef(null)
+  
   useEffect(() => {
     const fetchFilterData = async () => {
-      if (!query) return
+      if (!query) {
+        // Only clear filterData if query is actually empty
+        if (query === null || query === '') {
+          setFilterData(null)
+          filterDataCacheRef.current.clear()
+          previousQueryRef.current = null
+        }
+        return
+      }
 
-      try {
+      // Create a cache key from query and filters
+      const filterKey = `${query}-${JSON.stringify(debouncedFilters)}`
+      
+      // Check if query changed - if so, clear old filterData immediately and always fetch new data
+      const queryChanged = previousQueryRef.current !== null && previousQueryRef.current !== query
+      
+      if (queryChanged) {
+        // Query changed - clear old filterData immediately to show loading state
+        setFilterData(null)
         setLoadingFilters(true)
+      }
+      
+      previousQueryRef.current = query
+      
+      // Only use cache if query hasn't changed (i.e., user navigated back or only filters changed)
+      // When query changes, always fetch fresh data
+      if (!queryChanged && filterDataCacheRef.current.has(filterKey)) {
+        const cachedData = filterDataCacheRef.current.get(filterKey)
+        setFilterData(cachedData)
+        return
+      }
+      
+      // Query changed or no cache - fetch new data
+      try {
+        if (!queryChanged) {
+          setLoadingFilters(true)
+        }
         
         // Build filter params
         const params = new URLSearchParams()
@@ -170,8 +307,22 @@ export default function SearchPage() {
         if (response.ok) {
           const data = await response.json()
           if (data.success && data.data) {
-            setFilterData(data.data)
+            // Cache the filterData for this query+filter combination
+            filterDataCacheRef.current.set(filterKey, data.data)
+            // Always update filterData with a new object reference to ensure React detects the change
+            // This ensures price range updates for new search
+            setFilterData({ ...data.data })
+          } else {
+            // If API fails, clear filterData for this query to show empty state
+            setFilterData(null)
+            // Remove from cache if it exists
+            filterDataCacheRef.current.delete(filterKey)
           }
+        } else {
+          // If API fails, clear filterData for this query to show empty state
+          setFilterData(null)
+          // Remove from cache if it exists
+          filterDataCacheRef.current.delete(filterKey)
         }
       } catch (error) {
         console.error('Failed to fetch search filters:', error)
@@ -183,28 +334,42 @@ export default function SearchPage() {
     fetchFilterData()
   }, [query, debouncedFilters])
 
-  // Debounce search query and filters to prevent too many API calls
+  // Fetch search results with pagination (server-side pagination like categories)
   useEffect(() => {
     if (query) {
       const timer = setTimeout(() => {
-        dispatch(searchProducts({ query, filters: debouncedFilters, sort: sortBy }))
+        dispatch(searchProducts({ 
+          query, 
+          filters: debouncedFilters, 
+          sort: sortBy,
+          page: currentPage,
+          limit: pageSize
+        }))
       }, 300) // 300ms delay for search page
 
       return () => clearTimeout(timer)
     }
-  }, [dispatch, query, debouncedFilters, sortBy])
+  }, [dispatch, query, debouncedFilters, sortBy, currentPage, pageSize])
 
   // Build facets from filter API response for proper filter display
+  // Always prefer filterData from API over fallback to ensure consistent discounted price display
   const facets = useMemo(() => {
+    // Always use filterData if available - this ensures discounted price is shown correctly
     if (filterData) {
-      return buildFacetsFromSearchFilters(filterData)
+      const builtFacets = buildFacetsFromSearchFilters(filterData)
+      return builtFacets
     }
-    // Fallback to search results if no filter data available
+    // Only use fallback if we truly don't have filterData AND filters are not loading
+    // This prevents showing incorrect price range when navigating back (filterData temporarily null)
+    if (loadingFilters) {
+      return []
+    }
+    // Fallback to search results only if filterData is unavailable and not loading
     if (!Array.isArray(searchResults) || searchResults.length === 0) {
       return []
     }
     return buildFacetsFromProducts(searchResults)
-  }, [filterData, searchResults])
+  }, [filterData, searchResults, loadingFilters, query])
 
   const handleFilterChange = (key, value) => {
     setSelectedFilters(prev => ({ ...prev, [key]: value }))
@@ -243,9 +408,16 @@ export default function SearchPage() {
             {/* Main Content Area with Scrollable Products */}
             <div className="content-area">
               <div className="section-header sticky-header">
-                <h2 className="section-title">
-                  {query ? `Search Results for "${query}"` : "Search Results"}
-                </h2>
+                <div className="section-title-wrapper">
+                  <h2 className="section-title">
+                    {query ? `Search Results for "${query}"` : "Search Results"}
+                  </h2>
+                  {!searchLoading && !searchError && totalResults > 0 && (
+                    <span className="search-count">
+                      {totalResults} {totalResults === 1 ? 'product' : 'products'}
+                    </span>
+                  )}
+                </div>
                 <div className="section-actions">
                   <SortDropdown 
                     currentSort={sortBy}
@@ -254,7 +426,7 @@ export default function SearchPage() {
                 </div>
               </div>
 
-              <div className="products-scroll-container">
+              <div className="products-scroll-container" ref={productsScrollContainerRef}>
                 <div className="grid-3">
                   {searchLoading ? (
                     Array.from({ length: Math.min(pageSize, 6) }).map((_, index) => (
@@ -272,20 +444,26 @@ export default function SearchPage() {
                     ))
                   ) : searchError ? (
                     <div style={{ gridColumn: '1 / -1', color: 'red' }}>Failed to load search results: {searchError}</div>
-                  ) : paginatedResults.length > 0 ? (
-                    paginatedResults.map((product, index) => (
+                  ) : displayResults.length > 0 ? (
+                    displayResults.map((product, index) => {
+                      const priceWithVat = product.price_with_vat ?? product.price
+                      const discountPriceWithVat = product.discount_price_with_vat ?? product.discount_price
+                      const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
+                      return (
                       <div key={product._id || product.id || `p-${index}`} className="grid-item">
                         <ProductCard 
                           id={product._id || product.id}
                           slug={product.slug || product._id || product.id}
                           title={product.title || product.name || 'Product'}
-                          price={product.price ? `AED ${product.price}` : 'AED 0'}
+                          price={effectivePrice != null ? `AED ${effectivePrice}` : 'AED 0'}
                           rating={product.average_rating || product.rating || '4.0'}
                           deliveryTime={product.deliveryTime || '30 Min'}
                           image={product.images?.[0]?.url || product.image || '/iphone.jpg'}
+                          priceWithVat={priceWithVat != null ? Number(priceWithVat) : undefined}
+                          discountPriceWithVat={discountPriceWithVat != null && Number(discountPriceWithVat) > 0 ? Number(discountPriceWithVat) : undefined}
                         />
                       </div>
-                    ))
+                    )})
                   ) : (
                     <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '40px 0', color: '#6b7280' }}>
                       No products found for this search.
@@ -294,35 +472,42 @@ export default function SearchPage() {
                 </div>
               </div>
 
-              {!searchLoading && !searchError && paginatedResults.length > 0 && totalPages > 1 && (
-                <div className="pagination-controls" role="navigation" aria-label="Search results pagination">
-                  <button
-                    type="button"
-                    className="pagination-button"
-                    onClick={handlePreviousPage}
-                    disabled={currentPage === 1}
-                  >
-                    Previous
-                  </button>
-                  {pageNumbers.map((page) => (
+              {!searchLoading && !searchError && displayResults.length > 0 && totalPages > 1 && (
+                <div className="pagination-wrapper">
+                  <div className="pagination-controls" role="navigation" aria-label="Search results pagination">
                     <button
-                      key={page}
                       type="button"
-                      className={`pagination-button ${page === currentPage ? 'active' : ''}`}
-                      onClick={() => handlePageChange(page)}
-                      aria-current={page === currentPage ? 'page' : undefined}
+                      className="pagination-button"
+                      onClick={handlePreviousPage}
+                      disabled={currentPage === 1}
                     >
-                      {page}
+                      Previous
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="pagination-button"
-                    onClick={handleNextPage}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                  </button>
+                    {pageNumbers.map((page) => (
+                      <button
+                        key={page}
+                        type="button"
+                        className={`pagination-button ${page === currentPage ? 'active' : ''}`}
+                        onClick={() => handlePageChange(page)}
+                        aria-current={page === currentPage ? 'page' : undefined}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="pagination-button"
+                      onClick={handleNextPage}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                  {totalResults > 0 && (
+                    <span className="pagination-count">
+                      {productRange.start} - {productRange.end} products out of {totalResults}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -386,22 +571,39 @@ export default function SearchPage() {
           justify-content: center; 
         }
 
+        .pagination-wrapper {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          gap: 12px;
+          margin-top: 32px;
+        }
+
         .pagination-controls {
           display: flex;
           justify-content: center;
           align-items: center;
           gap: 8px;
-          margin-top: 32px;
           flex-wrap: wrap;
+        }
+
+        .pagination-count {
+          color: #6b7280;
+          font-family: 'DM Sans', -apple-system, Roboto, Helvetica, sans-serif;
+          font-size: 14px;
+          font-weight: 400;
+          line-height: 140%;
+          white-space: nowrap;
         }
 
         .pagination-button {
           min-width: 40px;
           padding: 8px 12px;
-          border: 1px solid #d1d5db;
+          border: 1px solid #0082FF;
           border-radius: 8px;
           background: #ffffff;
-          color: #111827;
+          color: #0082FF;
           font-size: 14px;
           font-weight: 500;
           cursor: pointer;
@@ -409,8 +611,8 @@ export default function SearchPage() {
         }
 
         .pagination-button:hover:not(:disabled) {
-          border-color: #111827;
-          color: #111827;
+          border-color: #0082FF;
+          color: #0082FF;
           background: #f9fafb;
         }
 
@@ -420,9 +622,9 @@ export default function SearchPage() {
         }
 
         .pagination-button.active {
-          background: #111827;
+          background: #0082FF;
           color: #ffffff;
-          border-color: #111827;
+          border-color: #0082FF;
         }
 
         .sticky-header {
@@ -471,13 +673,30 @@ export default function SearchPage() {
           padding-left: 24px;
         }
 
+        .section-title-wrapper {
+          display: flex;
+          flex-direction: row;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
         .section-title {
           color: #000;
           font-family: 'DM Sans', -apple-system, Roboto, Helvetica, sans-serif;
-          font-size: 40px;
+          font-size: 28px;
           font-weight: 700;
           line-height: 120%;
           margin: 0;
+        }
+
+        .search-count {
+          color: #6b7280;
+          font-family: 'DM Sans', -apple-system, Roboto, Helvetica, sans-serif;
+          font-size: 14px;
+          font-weight: 400;
+          line-height: 140%;
+          white-space: nowrap;
         }
 
         .section-actions {
@@ -493,8 +712,16 @@ export default function SearchPage() {
             align-items: flex-start;
           }
 
+          .section-title-wrapper {
+            gap: 8px;
+          }
+
           .section-title {
-            font-size: 28px;
+            font-size: 24px;
+          }
+          
+          .search-count {
+            font-size: 13px;
           }
         }
       `}</style>

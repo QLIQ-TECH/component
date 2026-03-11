@@ -14,6 +14,7 @@ import Orders from '../../components/profile/Orders/Orders'
 import Addresses from '../../components/profile/Addresses/Addresses'
 import AddCard from '../../components/profile/AddCard/AddCard'
 import QoynsHistory from '../../components/profile/QoynsHistory/QoynsHistory'
+import CashWalletHistory from '../../components/profile/CashWalletHistory/CashWalletHistory'
 import SendQoyn from '../../components/profile/SendQoyn/SendQoyn'
 import NewAddress from '../../components/profile/NewAddress/newAddress'
 import LocationModal from '../../components/LocationModal'
@@ -28,6 +29,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'personal-info')
   const [isEditing, setIsEditing] = useState(false)
   const [locationModalOpen, setLocationModalOpen] = useState(false)
+  const [comingSoonOpen, setComingSoonOpen] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState('all')
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 10
@@ -75,7 +77,7 @@ export default function ProfilePage() {
 
   // Fetch profile data only when on tabs that require it
   useEffect(() => {
-    const tabsThatDoNotNeedProfile = new Set(['orders', 'qoyns-wallet', 'qoyns-history', 'send-qoyn'])
+    const tabsThatDoNotNeedProfile = new Set(['orders', 'qoyns-wallet', 'qoyns-history', 'cash-wallet-history', 'send-qoyn'])
     if (!tabsThatDoNotNeedProfile.has(activeTab)) {
       dispatch(fetchProfile())
     }
@@ -147,7 +149,7 @@ export default function ProfilePage() {
   }
 
   const handleGoLiveClick = () => {
-    window.open('https://dev.qliq.ae/', '_blank')
+    window.open('https://iqliqlive.ae/', '_blank')
   }
 
   // Only show cash wallet tab for influencer role
@@ -171,12 +173,12 @@ export default function ProfilePage() {
             </p>
           </div>
           <div className={styles.actionTop}>
-            <button className={styles.goLiveBtn} onClick={handleGoLiveClick}>Go to QLIQ Live</button>
+            <button className={styles.goLiveBtn} onClick={handleGoLiveClick}>Go to IQLIQ Live</button>
             <button 
               className={styles.upgradeBtn}
-              onClick={() => router.push('/subscription')}
+              onClick={() => setComingSoonOpen(true)}
             >
-              Upgrade to QLIQ Plus
+              Upgrade to IQLIQ Plus
             </button>
           </div>
         </div>
@@ -201,7 +203,7 @@ export default function ProfilePage() {
                 Add New Card
               </button>
             )} */}
-            {/* {activeTab === 'qoyns-wallet' || activeTab === 'qoyns-history' || activeTab === 'send-qoyn' ? (
+            {activeTab === 'qoyns-wallet' || activeTab === 'qoyns-history' || activeTab === 'send-qoyn' ? (
               <div className={styles.qoynsActionsRow}>
                 <button
                   className={`${styles.addCardBtn} ${activeTab === 'qoyns-history' ? styles.active : ''}`}
@@ -209,20 +211,18 @@ export default function ProfilePage() {
                 >
                   History
                 </button>
+              </div>
+            ) : null}
+            {user?.role === 'influencer' && (activeTab === 'cash-wallet' || activeTab === 'cash-wallet-history') ? (
+              <div className={styles.qoynsActionsRow}>
                 <button
-                  className={`${styles.addCardBtn} ${activeTab === 'send-qoyn' ? styles.active : ''}`}
-                  onClick={() => handleTabChange('send-qoyn')}
+                  className={`${styles.addCardBtn} ${activeTab === 'cash-wallet-history' ? styles.active : ''}`}
+                  onClick={() => handleTabChange('cash-wallet-history')}
                 >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" style={{ verticalAlign: 'middle' }}>
-                      <circle cx="9" cy="9" r="9" fill="#111" />
-                      <path d="M9 6v6M6 9h6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    Send Qoyn
-                  </span>
+                  History
                 </button>
               </div>
-            ) : null} */}
+            ) : null}
             {activeTab === 'orders' && (
               <div className={styles.qoynsActionsRow}>
                 <div className={styles.statusDropdownWrapper}>
@@ -322,6 +322,10 @@ export default function ProfilePage() {
               <div className={styles.sectionContent}>
                 <QoynsHistory user={user} />
               </div>
+            ) : activeTab === 'cash-wallet-history' && user?.role === 'influencer' ? (
+              <div className={styles.sectionContent}>
+                <CashWalletHistory user={user} />
+              </div>
             ) : activeTab === 'send-qoyn' ? (
               <div className={styles.sectionContent}>
                 <SendQoyn
@@ -367,6 +371,7 @@ export default function ProfilePage() {
                 )}
                 {activeTab === 'qoyns-wallet' && null}
                 {activeTab === 'qoyns-history' && null}
+                {activeTab === 'cash-wallet-history' && null}
                 {activeTab === 'send-qoyn' && null}
                 {activeTab === 'orders' && null}
                 {activeTab === 'addresses' && (
@@ -404,6 +409,32 @@ export default function ProfilePage() {
         open={locationModalOpen}
         onClose={() => setLocationModalOpen(false)}
       />
+      {/* QLIQ Plus Coming Soon modal */}
+      {comingSoonOpen && (
+        <div className={styles.comingSoonOverlay} onClick={() => setComingSoonOpen(false)} role="dialog" aria-modal="true" aria-labelledby="coming-soon-title">
+          <div className={styles.comingSoonModal} onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              className={styles.comingSoonClose}
+              onClick={() => setComingSoonOpen(false)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h2 id="coming-soon-title" className={styles.comingSoonTitle}>Coming Soon</h2>
+            <p className={styles.comingSoonText}>
+              IQLIQ Plus is on its way. Stay tuned for exclusive benefits and more.
+            </p>
+            <button
+              type="button"
+              className={styles.comingSoonBtn}
+              onClick={() => setComingSoonOpen(false)}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

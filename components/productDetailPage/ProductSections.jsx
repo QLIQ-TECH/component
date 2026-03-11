@@ -11,7 +11,6 @@ import 'swiper/css/navigation'
 
 export default function ProductSections({ relatedProducts, productData }) {
   const [relatedNav, setRelatedNav] = useState({ isBeginning: true, isEnd: false })
-  const [customerAlsoLikedNav, setCustomerAlsoLikedNav] = useState({ isBeginning: true, isEnd: false })
   const [expandedItem, setExpandedItem] = useState(0)
   const [manufacturerImageIndex, setManufacturerImageIndex] = useState(0)
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -23,6 +22,10 @@ export default function ProductSections({ relatedProducts, productData }) {
   const [isMobile, setIsMobile] = useState(false)
   const relatedProductsSwiperRef = useRef(null)
   const customerAlsoLikedSwiperRef = useRef(null)
+
+  // Swiper navigation states
+  const [relatedProductsNav, setRelatedProductsNav] = useState({ isBeginning: true, isEnd: false })
+  const [customerAlsoLikedNav, setCustomerAlsoLikedNav] = useState({ isBeginning: true, isEnd: false })
 
   // Redux for reviews
   const dispatch = useDispatch()
@@ -350,9 +353,9 @@ export default function ProductSections({ relatedProducts, productData }) {
             showNavigation={true}
             onPrev={handleRelatedProductsPrev}
             onNext={handleRelatedProductsNext}
-            prevDisabled={relatedNav.isBeginning}
-            nextDisabled={relatedNav.isEnd}
             showButton={false}
+            prevDisabled={relatedProductsNav.isBeginning || !Array.isArray(relatedList) || relatedList.length === 0}
+            nextDisabled={relatedProductsNav.isEnd || !Array.isArray(relatedList) || relatedList.length === 0}
           />
           {Array.isArray(relatedList) && relatedList.length > 0 ? (
             <Swiper
@@ -364,16 +367,16 @@ export default function ProductSections({ relatedProducts, productData }) {
               freeMode={true}
               className="bestsellers-swiper"
               onSlideChange={(swiper) => {
-                setRelatedNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                setRelatedProductsNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
               }}
               onReachEnd={(swiper) => {
-                setRelatedNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                setRelatedProductsNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
               }}
               onReachBeginning={(swiper) => {
-                setRelatedNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                setRelatedProductsNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
               }}
               onSwiper={(swiper) => {
-                setRelatedNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                setRelatedProductsNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
               }}
             >
               {relatedList.map((product, index) => (
@@ -545,16 +548,22 @@ export default function ProductSections({ relatedProducts, productData }) {
                     <div
                       className="customer-photo"
                       key={i}
-                      style={{ backgroundImage: `url(${imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', cursor: 'pointer' }}
+                      style={{
+                        backgroundImage: `url(${imageUrl})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        cursor: 'pointer',
+                      }}
                       onClick={() => openGallery(i)}
                     ></div>
                   ))
                 ) : (
-                  [...Array(7)].map((_, i) => (
-                    <div className="customer-photo" key={i}></div>
-                  ))
+                  <div className="no-images-text">
+                    
+                  </div>
                 )}
               </div>
+
             </div>
             <div className="reviews-list">
               {reviewsLoading ? (
@@ -604,10 +613,10 @@ export default function ProductSections({ relatedProducts, productData }) {
             showNavigation={true}
             onPrev={handleCustomerAlsoLikedPrev}
             onNext={handleCustomerAlsoLikedNext}
-            prevDisabled={customerAlsoLikedNav.isBeginning}
-            nextDisabled={customerAlsoLikedNav.isEnd}
             showButton={false}
             buttonText="Upgrade"
+            prevDisabled={customerAlsoLikedNav.isBeginning || !Array.isArray(relatedList) || relatedList.length === 0}
+            nextDisabled={customerAlsoLikedNav.isEnd || !Array.isArray(relatedList) || relatedList.length === 0}
           />
           {Array.isArray(relatedList) && relatedList.length > 0 ? (
             <Swiper
@@ -616,6 +625,8 @@ export default function ProductSections({ relatedProducts, productData }) {
               slidesPerView={isMobile ? 1.2 : 'auto'}
               spaceBetween={isMobile ? 16 : 24}
               grabCursor={true}
+              freeMode={true}
+              className="bestsellers-swiper"
               onSlideChange={(swiper) => {
                 setCustomerAlsoLikedNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
               }}
@@ -628,8 +639,6 @@ export default function ProductSections({ relatedProducts, productData }) {
               onSwiper={(swiper) => {
                 setCustomerAlsoLikedNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
               }}
-              freeMode={true}
-              className="bestsellers-swiper"
             >
               {relatedList.map((product, index) => (
                 <SwiperSlide key={product.id || `product-${index}`} className="bestseller-slide">
@@ -1271,6 +1280,15 @@ export default function ProductSections({ relatedProducts, productData }) {
           color: #222;
           font-weight: 600;
         }
+        .no-images-text {
+          padding: 20px;
+          text-align: center;
+          color: #888;
+          font-size: 16px;
+          font-weight: 600;
+          width: 100%;
+}
+
         .customer-photos-row {
           display: flex;
           align-items: center;

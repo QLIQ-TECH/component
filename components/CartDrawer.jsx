@@ -3,9 +3,17 @@ import { useAuth } from '../contexts/AuthContext'
 import { useSelector, useDispatch } from 'react-redux'
 import { updateCartItem, removeFromCart, fetchCart, moveToWishlist } from '../store/slices/cartSlice'
 import { fetchWishlist } from '../store/slices/wishlistSlice'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useMemo } from 'react'
 import { getUserFromCookies } from '../utils/userUtils'
 import { useToast } from '../contexts/ToastContext'
+
+// Compute effective VAT price per item (discount_price_with_vat when available, else price_with_vat)
+function getItemEffectivePriceVat(item) {
+  const priceWithVat = item.price_with_vat ?? item.product?.price_with_vat ?? item.originalPrice ?? item.price
+  const discountPriceWithVat = item.discount_price_with_vat ?? item.product?.discount_price_with_vat ?? item.discountPrice
+  const effective = (discountPriceWithVat != null && Number(discountPriceWithVat) > 0) ? discountPriceWithVat : priceWithVat
+  return Number(effective) || 0
+}
 
 export default function CartDrawer({ open, onClose }) {
   const { requireAuth, user } = useAuth()
@@ -94,7 +102,7 @@ export default function CartDrawer({ open, onClose }) {
             userId,
             productId
           }))
-          
+
           // If successful, refresh wishlist and show success message
           if (result.type === 'cart/moveToWishlist/fulfilled') {
             show('Moved to wishlist')
@@ -114,6 +122,16 @@ export default function CartDrawer({ open, onClose }) {
       window.location.href = '/checkout'
     })
   }
+
+  // Total using VAT-inclusive prices (discount_price_with_vat when available, else price_with_vat)
+  const totalWithVat = useMemo(() => {
+    if (!items || items.length === 0) return 0
+    return items.reduce((sum, item) => {
+      const effectivePrice = getItemEffectivePriceVat(item)
+      const qty = Number(item.quantity) || 1
+      return sum + effectivePrice * qty
+    }, 0)
+  }, [items])
 
   if (!open) return null
   return (
@@ -170,15 +188,26 @@ export default function CartDrawer({ open, onClose }) {
                     <div className="cart-brand">{item.brand || 'Product'}</div>
                     <div className="cart-name">{item.name}</div>
                     <div className="cart-price-container">
-                      <span className="cart-price">AED {item.discountPrice || item.price}</span>
-                      {item.originalPrice && item.originalPrice > (item.discountPrice || item.price) && (
-                        <>
-                          <span className="cart-original-price">AED {item.originalPrice}</span>
-                          <span className="cart-discount-badge">
-                            {Math.round(((item.originalPrice - (item.discountPrice || item.price)) / item.originalPrice) * 100)}% Off
-                          </span>
-                        </>
-                      )}
+                      {(() => {
+                        const priceWithVat = item.price_with_vat ?? item.product?.price_with_vat ?? item.originalPrice ?? item.price
+                        const discountPriceWithVat = item.discount_price_with_vat ?? item.product?.discount_price_with_vat ?? item.discountPrice
+                        const effectivePrice = (discountPriceWithVat != null && Number(discountPriceWithVat) > 0) ? discountPriceWithVat : priceWithVat
+                        const originalPrice = priceWithVat
+                        const showDiscount = originalPrice != null && effectivePrice != null && Number(originalPrice) > Number(effectivePrice)
+                        return (
+                          <>
+                            <span className="cart-price">AED {effectivePrice != null ? Number(effectivePrice) : (item.discountPrice || item.price)}</span>
+                            {showDiscount && (
+                              <>
+                                <span className="cart-original-price">AED {originalPrice}</span>
+                                <span className="cart-discount-badge">
+                                  {Math.round(((Number(originalPrice) - Number(effectivePrice)) / Number(originalPrice)) * 100)}% Off
+                                </span>
+                              </>
+                            )}
+                          </>
+                        )
+                      })()}
                     </div>
                     <div className="cart-actions">
                       <div className='cart-qty-control'>
@@ -228,18 +257,18 @@ export default function CartDrawer({ open, onClose }) {
             </div>
           )}
         </div>
-        <div className="drawer-footer">
-          <div className="drawer-footer-content" 
-            onClick={handleCheckout}
-            disabled={items.length === 0}
-          >
+        <div className="drawer-footer"
+          onClick={handleCheckout}
+          disabled={items.length === 0}
+        >
+          <div className="drawer-footer-content">
             <button
               className="drawer-checkout-btn"
               disabled={items.length === 0}
             >
               Checkout
             </button>
-            <span className="drawer-total">AED {total.toFixed(2)}</span>
+            <span className="drawer-total">AED {totalWithVat.toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -452,6 +481,7 @@ export default function CartDrawer({ open, onClose }) {
           background: #fff;
           position: sticky;
           bottom: 0;
+          cursor: pointer;
         }
         .drawer-footer-content {
           display: flex;

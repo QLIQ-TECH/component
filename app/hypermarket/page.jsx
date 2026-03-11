@@ -37,23 +37,26 @@ const transformProductData = (apiProduct) => {
   // Use placeholder image if no valid image URL
   const imageUrl = primaryImage?.url || 'https://api.builder.io/api/v1/image/assets/TEMP/0ef2d416817956be0fe96760f14cbb67e415a446?width=644';
 
-  // Calculate savings for offer badge
-  const savings = apiProduct.is_offer && apiProduct.price && apiProduct.discount_price
-    ? apiProduct.price - apiProduct.discount_price
+  const priceWithVat = apiProduct.price_with_vat ?? apiProduct.price
+  const discountPriceWithVat = apiProduct.discount_price_with_vat ?? apiProduct.discount_price
+  const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
+  const savings = apiProduct.is_offer && priceWithVat != null && discountPriceWithVat != null && discountPriceWithVat > 0
+    ? priceWithVat - discountPriceWithVat
     : 0;
 
-  // Format savings to 2 decimal places
   const formattedSavings = savings > 0 ? savings.toFixed(2) : 0;
 
   return {
     id: apiProduct._id || apiProduct.slug,
     slug: apiProduct.slug,
     title: apiProduct.title || 'Product Title',
-    price: `AED ${apiProduct.discount_price || apiProduct.price || '0'}`,
+    price: `AED ${effectivePrice ?? '0'}`,
     rating: apiProduct.average_rating?.toString() || '0',
     deliveryTime: '30 Min', // Default delivery time since it's not in API
     image: imageUrl,
-    badge: apiProduct.is_offer && savings > 0 ? `Save AED ${formattedSavings}` : null
+    badge: apiProduct.is_offer && savings > 0 ? `Save AED ${formattedSavings}` : null,
+    priceWithVat: priceWithVat != null ? Number(priceWithVat) : undefined,
+    discountPriceWithVat: discountPriceWithVat != null && Number(discountPriceWithVat) > 0 ? Number(discountPriceWithVat) : undefined
   }
 }
 
@@ -67,15 +70,15 @@ export default function Home() {
   const bestCashbackSwiperRef = useRef(null)
   const dispatch = useDispatch()
   const router = useRouter()
-  const { hypermarketStores, fastestDeliveryStores, bestCheapDeals, bestBundleDeals, loading, error } = useSelector(state => state.stores)
+  const { hypermarketStores, fastestDeliveryStores, bestCheapDeals, bestBundleDeals, loading, loadingBestCheapDeals, loadingBestBundleDeals, error } = useSelector(state => state.stores)
   const { products, categoryProducts = [], categoryProductsLoading } = useSelector(state => state.products)
   const [userLocation, setUserLocation] = useState(null)
-
-  // Navigation State
-  const [fastestDeliveryNav, setFastestDeliveryNav] = useState({ isBeginning: true, isEnd: false });
-  const [bestCheapDealsNav, setBestCheapDealsNav] = useState({ isBeginning: true, isEnd: false });
-  const [bestBundlesNav, setBestBundlesNav] = useState({ isBeginning: true, isEnd: false });
-  const [bestCashbackNav, setBestCashbackNav] = useState({ isBeginning: true, isEnd: false });
+  
+  // Swiper navigation states
+  const [fastestDeliveryNav, setFastestDeliveryNav] = useState({ isBeginning: true, isEnd: false })
+  const [bestCheapDealsNav, setBestCheapDealsNav] = useState({ isBeginning: true, isEnd: false })
+  const [bestBundlesNav, setBestBundlesNav] = useState({ isBeginning: true, isEnd: false })
+  const [bestCashbackNav, setBestCashbackNav] = useState({ isBeginning: true, isEnd: false })
 
   // Check screen size for mobile detection
   useEffect(() => {
@@ -127,7 +130,7 @@ export default function Home() {
   useEffect(() => {
     dispatch(fetchHypermarketStores())
     dispatch(fetchProducts())
-    dispatch(fetchProductsByCategory({ categoryId: hypermarketCategoryId, limit: 200 }))
+    dispatch(fetchProductsByCategory({ categoryId: hypermarketCategoryId, limit: 210 }))
   }, [dispatch])
 
   // Fetch fastest delivery stores when location is available
@@ -138,8 +141,8 @@ export default function Home() {
         longitude: userLocation.longitude,
         storeType: 'hypermarket'
       }))
-      dispatch(fetchBestCheapDeals({ storeType: 'hypermarket', page: 1, limit: 20 }))
-      dispatch(fetchBestBundleDeals({ storeType: 'hypermarket', page: 1, limit: 20 }))
+      dispatch(fetchBestCheapDeals({ storeType: 'hypermarket', page: 1, limit: 21 }))
+      dispatch(fetchBestBundleDeals({ storeType: 'hypermarket', page: 1, limit: 21 }))
     }
   }, [userLocation, dispatch])
 
@@ -178,37 +181,37 @@ export default function Home() {
 
   // Navigation handlers
   const handleFastestDeliveryPrev = () => {
-    if (fastestDeliverySwiperRef.current?.swiper) {
+    if (fastestDeliverySwiperRef.current?.swiper && !fastestDeliveryNav.isBeginning) {
       fastestDeliverySwiperRef.current.swiper.slidePrev()
     }
   }
 
   const handleFastestDeliveryNext = () => {
-    if (fastestDeliverySwiperRef.current?.swiper) {
+    if (fastestDeliverySwiperRef.current?.swiper && !fastestDeliveryNav.isEnd) {
       fastestDeliverySwiperRef.current.swiper.slideNext()
     }
   }
 
   const handleBestCheapDealsPrev = () => {
-    if (bestCheapDealsSwiperRef.current?.swiper) {
+    if (bestCheapDealsSwiperRef.current?.swiper && !bestCheapDealsNav.isBeginning) {
       bestCheapDealsSwiperRef.current.swiper.slidePrev()
     }
   }
 
   const handleBestCheapDealsNext = () => {
-    if (bestCheapDealsSwiperRef.current?.swiper) {
+    if (bestCheapDealsSwiperRef.current?.swiper && !bestCheapDealsNav.isEnd) {
       bestCheapDealsSwiperRef.current.swiper.slideNext()
     }
   }
 
   const handleBestBundlesPrev = () => {
-    if (bestBundlesSwiperRef.current?.swiper) {
+    if (bestBundlesSwiperRef.current?.swiper && !bestBundlesNav.isBeginning) {
       bestBundlesSwiperRef.current.swiper.slidePrev()
     }
   }
 
   const handleBestBundlesNext = () => {
-    if (bestBundlesSwiperRef.current?.swiper) {
+    if (bestBundlesSwiperRef.current?.swiper && !bestBundlesNav.isEnd) {
       bestBundlesSwiperRef.current.swiper.slideNext()
     }
   }
@@ -308,7 +311,7 @@ export default function Home() {
             prevDisabled={bestCheapDealsNav.isBeginning}
             nextDisabled={bestCheapDealsNav.isEnd}
           />
-          {loading ? (
+          {loadingBestCheapDeals ? (
             <div style={{ display: 'flex', gap: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
               {[...Array(4)].map((_, index) => (
                 <StoreCardSkeleton key={`skeleton-${index}`} />
@@ -389,7 +392,7 @@ export default function Home() {
             prevDisabled={bestBundlesNav.isBeginning}
             nextDisabled={bestBundlesNav.isEnd}
           />
-          {loading ? (
+          {loadingBestBundleDeals ? (
             <div style={{ display: 'flex', gap: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
               {[...Array(4)].map((_, index) => (
                 <StoreCardSkeleton key={`skeleton-${index}`} />

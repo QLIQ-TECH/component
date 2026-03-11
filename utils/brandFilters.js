@@ -18,15 +18,33 @@ export function buildFacetsFromBrandFilters(filterData) {
     })
   }
 
-  // Price
-  if (filterData.price) {
-    facets.push({
-      key: 'price',
-      label: 'Price',
-      type: 'range',
-      min: Math.floor(filterData.price.min || 0),
-      max: Math.ceil(filterData.price.max || 0),
-    })
+  // Price - use discounted price if available with valid min/max, otherwise fallback to regular price
+  // Check for both camelCase and snake_case property names
+  const discountedPrice = filterData.discountedPrice || filterData.discounted_price
+  
+  // Use discountedPrice if it exists and has valid values (max > 0 indicates discounts exist)
+  const priceData = (discountedPrice && 
+                     discountedPrice.min != null && 
+                     discountedPrice.max != null &&
+                     discountedPrice.max > 0) 
+                     ? discountedPrice 
+                     : filterData.price
+  
+  if (priceData && priceData.min != null && priceData.max != null) {
+    const minPrice = Math.floor(priceData.min)
+    const maxPrice = Math.ceil(priceData.max)
+    
+    // Only add price filter if there's a range (min !== max)
+    // If all products have the same price, don't show the filter
+    if (minPrice !== maxPrice) {
+      facets.push({
+        key: 'price',
+        label: 'Price',
+        type: 'range',
+        min: minPrice,
+        max: maxPrice,
+      })
+    }
   }
 
   // Rating - removed as requested
@@ -48,14 +66,14 @@ export function buildFacetsFromBrandFilters(filterData) {
   // Brand filter - NOT mapped on brand pages (user is already viewing a specific brand)
   // Even if filterData.brands or filterData.brand exists, we don't include it as a filter option
 
-  // Stores
+  // Stores - use _id as value so API receives store_id and selection matches URL storeId
   if (filterData.stores && Array.isArray(filterData.stores) && filterData.stores.length > 0) {
     facets.push({
       key: 'store',
       label: 'Store',
       type: 'checkbox',
       options: filterData.stores.map(s => ({
-        value: s.name || s._id,
+        value: s._id || s.id || s.name,
         label: s.name || 'Unknown',
         count: s.count || 0
       }))

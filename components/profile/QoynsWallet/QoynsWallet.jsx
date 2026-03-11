@@ -46,7 +46,6 @@ export default function QoynsWallet() {
   }, [dispatch])
 
   const daysRemaining = useMemo(() => calculateDaysRemaining(qoynExpiryDate), [qoynExpiryDate])
-  const formattedExpiryDate = useMemo(() => formatExpiryDate(qoynExpiryDate), [qoynExpiryDate])
 
   return (
     <div className={styles.walletHeader}>
@@ -59,10 +58,10 @@ export default function QoynsWallet() {
         <div className={styles.CardDetails}>
           {daysRemaining !== null ? (
             <span className={styles.QoynsExiry}>
-              Expires on {formattedExpiryDate} ({daysRemaining} {daysRemaining === 1 ? 'Day' : 'Days'} remaining)
+              Expires in {daysRemaining} {daysRemaining === 1 ? 'Day' : 'Days'}
             </span>
           ) : (
-            <span className={styles.QoynsExiry}>No expiry date available</span>
+            <span className={styles.QoynsExiry}>No expiry is available</span>
           )}
         </div>
       </div>

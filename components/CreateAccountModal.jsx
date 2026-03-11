@@ -139,7 +139,7 @@ export default function CreateAccountModal({ open, onClose, onBackToLogin }) {
                 .create-rules-1 {
           list-style: none;
           padding: 0;
-          margin: 32px 0 0 0;
+          margin: 15px 0 0 0;
           display: flex;
           flex-direction: column;
           gap: 8px;
@@ -148,7 +148,7 @@ export default function CreateAccountModal({ open, onClose, onBackToLogin }) {
                         .create-rules-2 {
           list-style: none;
           padding: 0;
-          margin: 32px 0 32px 0;
+          margin: 10px 0 10px 0;
           display: flex;
           flex-direction: column;
           gap: 8px;
@@ -192,7 +192,7 @@ export default function CreateAccountModal({ open, onClose, onBackToLogin }) {
           object-fit: contain;
         }
         .create-back-btn {
-          margin-top: auto;
+          margin-top: 25px;
           align-self: flex-start;
           padding: 14px 32px;
           border-radius: 999px;
@@ -223,23 +223,36 @@ export default function CreateAccountModal({ open, onClose, onBackToLogin }) {
           object-fit: cover;
         }
         @media (max-width: 900px) {
+          .create-modal {
+            max-width: 600px;
+            width: 95%;
+          }
           .create-modal-content {
             flex-direction: column;
             height: auto;
           }
-          .create-modal-left,
           .create-modal-right {
+            display: none;
+          }
+          .create-modal-left {
             padding: 32px;
           }
-          .create-back-btn {
-            align-self: stretch;
+           .create-back-btn {
+            align-self: flex-start;
             text-align: center;
+            width: 100%;
+            min-width: 0;
+            padding: 12px;
           }
         }
         @media (max-width: 640px) {
           .create-modal {
             border-radius: 16px;
-            margin: 16px;
+            width: 92%;
+            margin: 0;
+          }
+          .create-modal-left {
+            padding: 24px 20px;
           }
           .create-title {
             font-size: 32px;

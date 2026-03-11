@@ -1,6 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit'
 import { getAuthToken, getUserFromCookies } from '../../utils/userUtils'
-import { addresses, payment, wallet } from '../api/endpoints'
+import { addresses, payment, wallet, zones, delivery, orders, gigs } from '../api/endpoints'
  
 
 // Async thunks for checkout operations
@@ -128,7 +128,7 @@ export const createStripePaymentIntent = createAsyncThunk(
           }
         }),
         total: orderData.total,
-        currency: 'usd',
+        currency: 'aed',
         // Include shipping information
         shippingMethodCost: orderData.shippingMethodCost || orderData.shipping || 0,
         shippingCost: orderData.shippingMethodCost || orderData.shipping || 0,
@@ -295,7 +295,7 @@ export const fetchAcceptedPurchaseGigs = createAsyncThunk(
         throw new Error('Authentication required')
       }
 
-      const response = await fetch('https://backendgigs.qliq.ae/api/gig-completions/accepted-purchase-gigs', {
+      const response = await fetch(gigs.acceptedPurchaseGigs, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -326,7 +326,7 @@ export const fetchGigCompletions = createAsyncThunk(
         throw new Error('Authentication required')
       }
 
-      const response = await fetch('https://backendgigs.qliq.ae/api/gig-completions/accepted-purchase-gigs', {
+      const response = await fetch(gigs.acceptedPurchaseGigs, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -341,6 +341,369 @@ export const fetchGigCompletions = createAsyncThunk(
 
       const responseData = await response.json()
       return responseData.data || []
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch countries from zones API
+export const fetchCountries = createAsyncThunk(
+  'checkout/fetchCountries',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await fetch(zones.getCountries, {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to fetch countries')
+      }
+
+      const responseData = await response.json()
+      return responseData.data?.countries || []
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch cities by country
+export const fetchCitiesByCountry = createAsyncThunk(
+  'checkout/fetchCitiesByCountry',
+  async (countryName, { rejectWithValue }) => {
+    try {
+      const response = await fetch(zones.getCitiesByCountry(countryName), {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to fetch cities')
+      }
+
+      const responseData = await response.json()
+      return responseData.data?.cities || []
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch zones by city
+export const fetchZonesByCity = createAsyncThunk(
+  'checkout/fetchZonesByCity',
+  async (cityName, { rejectWithValue }) => {
+    try {
+      const response = await fetch(zones.getZonesByCity(cityName), {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Failed to fetch zones')
+      }
+
+      const responseData = await response.json()
+      return responseData.data?.zones || []
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch shipping methods by address (lat/lng, city, etc.)
+export const fetchShippingMethods = createAsyncThunk(
+  'checkout/fetchShippingMethods',
+  async (params, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const searchParams = new URLSearchParams({
+        latitude: String(params.latitude),
+        longitude: String(params.longitude),
+        ...(params.city && { city: params.city }),
+        ...(params.state && { state: params.state }),
+        ...(params.country && { country: params.country }),
+        ...(params.postalCode && { postalCode: params.postalCode })
+      })
+      const response = await fetch(`${delivery.getShippingMethods}?${searchParams.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (!response.ok) {
+        throw new Error('Failed to fetch shipping methods')
+      }
+      const data = await response.json()
+      return data.data?.shippingMethods || []
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Create Stripe hosted checkout session (redirect flow)
+export const createStripeHostedCheckoutSession = createAsyncThunk(
+  'checkout/createStripeHostedCheckoutSession',
+  async (body, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const res = await fetch(payment.stripeHostedCheckout, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        let errMsg = text || `Checkout failed: ${res.status}`
+        try {
+          const errJson = JSON.parse(text)
+          errMsg = errJson.message || errJson.error || errMsg
+        } catch (_) {}
+        throw new Error(errMsg)
+      }
+      const json = await res.json()
+      return json.data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Cash wallet checkout - POST https://backendcart.qliq.ae/api/payment/cash-wallet/checkout
+// Call when full payment is done by cash wallet. Payload: items, currency, total, subtotal, vat, discount,
+// cashWalletAmount, qoynsDiscountAmount, couponDiscountAmount, couponCode, deliveryAddress, shippingMethod, shippingMethodName, shippingMethodCost
+export const createCashWalletCheckout = createAsyncThunk(
+  'checkout/createCashWalletCheckout',
+  async (checkoutPayload, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const url = payment.cashWalletCheckout
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(checkoutPayload)
+      })
+      const responseText = await response.text()
+      if (!response.ok) {
+        try {
+          const errorData = JSON.parse(responseText)
+          throw new Error(errorData.message || 'Failed to process cash wallet payment.')
+        } catch (e) {
+          if (e instanceof Error && e.message.startsWith('Failed to process')) throw e
+          throw new Error(responseText || 'Failed to process cash wallet payment. Please try again.')
+        }
+      }
+      return responseText ? JSON.parse(responseText) : {}
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Redeem cash wallet (after order success)
+export const redeemCash = createAsyncThunk(
+  'checkout/redeemCash',
+  async (payload, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const response = await fetch(wallet.redeemCash, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ amountInAed: payload.amountInAed })
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to redeem cash')
+      }
+      return await response.json()
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch user orders (for success page / gig completion)
+export const fetchUserOrders = createAsyncThunk(
+  'checkout/fetchUserOrders',
+  async (params, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const { page = 1, limit = 10 } = params || {}
+      const response = await fetch(`${orders.getUserOrders}?page=${page}&limit=${limit}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to fetch orders')
+      }
+      const data = await response.json()
+      return data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Fetch single order by ID (for success page - cash wallet)
+export const fetchOrderById = createAsyncThunk(
+  'checkout/fetchOrderById',
+  async (orderId, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      if (!orderId) {
+        throw new Error('Order ID is required')
+      }
+      const response = await fetch(orders.getOrderById(orderId), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Failed to fetch order')
+      }
+      const data = await response.json()
+      return data?.data?.order ?? data?.order ?? data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Confirm Stripe session (success page)
+export const confirmStripeSession = createAsyncThunk(
+  'checkout/confirmStripeSession',
+  async (sessionId, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const response = await fetch(payment.stripeConfirmSession(sessionId), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Failed to confirm payment session')
+      }
+      const responseData = await response.json()
+      return responseData.data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Confirm Stripe payment intent (success page)
+export const confirmStripePaymentIntent = createAsyncThunk(
+  'checkout/confirmStripePaymentIntent',
+  async (paymentIntentId, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const response = await fetch(payment.stripeConfirm(paymentIntentId), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || 'Failed to confirm payment')
+      }
+      const responseData = await response.json()
+      return responseData.data
+    } catch (error) {
+      return rejectWithValue(error.message)
+    }
+  }
+)
+
+// Notify gig completion purchase (POST /api/gig-completions/purchase)
+// Body: { orderId, couponCode, influencerCommission (AED) }
+export const notifyGigCompletionPurchase = createAsyncThunk(
+  'checkout/notifyGigCompletionPurchase',
+  async (payload, { rejectWithValue }) => {
+    try {
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+      const { orderId, couponCode, influencerCommission } = payload
+      const body = {
+        orderId: orderId != null ? String(orderId) : undefined,
+        couponCode: couponCode != null ? String(couponCode) : undefined,
+        influencerCommission: typeof influencerCommission === 'number' ? Number(influencerCommission) : Number(influencerCommission) || 0
+      }
+      const response = await fetch(gigs.purchase, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      })
+      if (!response.ok) {
+        const errorText = await response.text()
+        let errMsg = errorText || `Failed to notify gig completion purchase (${response.status})`
+        try {
+          const errJson = JSON.parse(errorText)
+          errMsg = errJson.message || errJson.error || errMsg
+        } catch (_) {}
+        throw new Error(errMsg)
+      }
+      const contentType = response.headers.get('content-type')
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json()
+      }
+      return { success: true }
     } catch (error) {
       return rejectWithValue(error.message)
     }
@@ -418,6 +781,17 @@ const checkoutSlice = createSlice({
     loadingGigCompletions: false,
     gigCompletionsError: null,
     appliedGigCompletion: null,
+    
+    // Zones (Countries, Cities, Zones)
+    countries: [],
+    loadingCountries: false,
+    countriesError: null,
+    cities: [],
+    loadingCities: false,
+    citiesError: null,
+    zones: [],
+    loadingZones: false,
+    zonesError: null,
     
     // General
     loading: false,
@@ -687,6 +1061,51 @@ const checkoutSlice = createSlice({
       .addCase(redeemQoyns.rejected, (state, action) => {
         state.qoynValidation.isValidationLoading = false
         state.qoynValidation.validationError = action.payload
+      })
+      
+      // Fetch countries
+      .addCase(fetchCountries.pending, (state) => {
+        state.loadingCountries = true
+        state.countriesError = null
+      })
+      .addCase(fetchCountries.fulfilled, (state, action) => {
+        state.loadingCountries = false
+        state.countries = action.payload || []
+      })
+      .addCase(fetchCountries.rejected, (state, action) => {
+        state.loadingCountries = false
+        state.countriesError = action.payload
+      })
+      
+      // Fetch cities by country
+      .addCase(fetchCitiesByCountry.pending, (state) => {
+        state.loadingCities = true
+        state.citiesError = null
+        state.cities = [] // Clear previous cities
+        state.zones = [] // Clear zones when country changes
+      })
+      .addCase(fetchCitiesByCountry.fulfilled, (state, action) => {
+        state.loadingCities = false
+        state.cities = action.payload || []
+      })
+      .addCase(fetchCitiesByCountry.rejected, (state, action) => {
+        state.loadingCities = false
+        state.citiesError = action.payload
+      })
+      
+      // Fetch zones by city
+      .addCase(fetchZonesByCity.pending, (state) => {
+        state.loadingZones = true
+        state.zonesError = null
+        state.zones = [] // Clear previous zones
+      })
+      .addCase(fetchZonesByCity.fulfilled, (state, action) => {
+        state.loadingZones = false
+        state.zones = action.payload || []
+      })
+      .addCase(fetchZonesByCity.rejected, (state, action) => {
+        state.loadingZones = false
+        state.zonesError = action.payload
       })
   }
 })

@@ -2,10 +2,15 @@
 // Produces sections for: Availability, Price range, Rating, Brand, Store, Categories, Attributes, Specifications, Tags, Offers
 
 function getNumericPrice(product) {
-  const effective = typeof product.discount_price === 'number' && product.discount_price > 0
-    ? product.discount_price
-    : product.price
-  return typeof effective === 'number' ? effective : 0
+  // Use discounted price with VAT when available, else price with VAT, else price (for facets/range)
+  const discountWithVat = product.discount_price_with_vat != null && Number(product.discount_price_with_vat) > 0
+    ? Number(product.discount_price_with_vat)
+    : null
+  if (discountWithVat !== null) return discountWithVat
+  const priceWithVat = product.price_with_vat != null ? Number(product.price_with_vat) : null
+  if (priceWithVat !== null) return priceWithVat
+  const fallback = typeof product.price === 'number' ? product.price : 0
+  return typeof fallback === 'number' ? fallback : 0
 }
 
 export function buildFacetsFromProducts(products = []) {
@@ -119,14 +124,21 @@ export function buildFacetsFromProducts(products = []) {
     ]
   })
 
-  // Price
-  facets.push({
-    key: 'price',
-    label: 'Price',
-    type: 'range',
-    min: Math.floor(minPrice),
-    max: Math.ceil(maxPrice),
-  })
+  // Price - only show if there's a price range (min !== max)
+  const floorMinPrice = Math.floor(minPrice)
+  const ceilMaxPrice = Math.ceil(maxPrice)
+  
+  // Only add price filter if there's a range (min !== max)
+  // If all products have the same price, don't show the filter
+  if (floorMinPrice !== ceilMaxPrice) {
+    facets.push({
+      key: 'price',
+      label: 'Price',
+      type: 'range',
+      min: floorMinPrice,
+      max: ceilMaxPrice,
+    })
+  }
 
   // Rating
   const ratingOptions = [5,4,3,2,1,0]

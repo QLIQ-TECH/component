@@ -15,19 +15,24 @@ import { buildFacetsFromCategoryFilters } from '@/utils/categoryFilters'
 import { buildFacetsFromBrandFilters } from '@/utils/brandFilters'
 import { buildFacetsFromStoreFilters } from '@/utils/storeFilters'
 
-// Helper function to transform API product data
+// Helper function to transform API product data (display and cart use VAT-inclusive prices)
 const transformProductData = (apiProduct) => {
-  const savings = apiProduct.discount_price ? apiProduct.price - apiProduct.discount_price : 0
+  const priceWithVat = apiProduct.price_with_vat ?? apiProduct.price
+  const discountPriceWithVat = apiProduct.discount_price_with_vat ?? apiProduct.discount_price
+  const effectivePrice = (discountPriceWithVat != null && discountPriceWithVat > 0) ? discountPriceWithVat : priceWithVat
+  const savings = (priceWithVat != null && discountPriceWithVat != null && discountPriceWithVat > 0) ? priceWithVat - discountPriceWithVat : 0
   return {
     id: apiProduct._id,
     slug: apiProduct.slug,
     title: apiProduct.title,
-    price: `AED ${apiProduct.discount_price || apiProduct.price || '0'}`,
-    originalPrice: apiProduct.price,
+    price: `AED ${effectivePrice ?? '0'}`,
+    originalPrice: priceWithVat,
     rating: apiProduct.average_rating || 4.5,
     deliveryTime: "30 Min",
     image: apiProduct.images?.[0]?.url || '/iphone.jpg',
-    badge: savings > 0 ? `Save AED ${savings}` : null
+    badge: savings > 0 ? `Save AED ${savings}` : null,
+    priceWithVat: priceWithVat != null ? Number(priceWithVat) : undefined,
+    discountPriceWithVat: discountPriceWithVat != null && Number(discountPriceWithVat) > 0 ? Number(discountPriceWithVat) : undefined
   }
 }
 
@@ -37,11 +42,12 @@ export default function BrandPage() {
   const searchParams = useSearchParams()
   const dispatch = useDispatch()
   const slug = params.slug
-  const storeId = searchParams.get('storeId')
+  const storeId = searchParams.get('storeId') || searchParams.get('storeID') || searchParams.get('store_id')
   const categoryLevel = searchParams.get('categoryLevel')
   // Note: brand_id is removed - brands should navigate to their own page, not watches
   const source = searchParams.get('source')
   const categoryId = searchParams.get('categoryId') || searchParams.get('category_id') // For filtering by specific category ID (support both formats)
+  const storeType = searchParams.get('storeType') // Store type filter (hypermarket, supermarket, e-shop)
 
   const { products, loading, error } = useSelector(state => state.products)
   const [brandInfo, setBrandInfo] = useState(null)
@@ -207,71 +213,9 @@ export default function BrandPage() {
           console.error('Error fetching store filter data:', error)
         }
       } else if (categoryLevel && slug && !isStorePage) {
-        // Fetch category filters with selected filters for accurate counts
+        // Fetch category filters once (same as brand) - do NOT pass selected filters so the filter options stay stable
         try {
-          // Build filter params for the category filters API
-          const filterParams = new URLSearchParams()
-          
-          // Price filter
-          if (debouncedFilters.price?.min !== undefined && debouncedFilters.price?.min !== '') {
-            filterParams.append('min_price', debouncedFilters.price.min)
-          }
-          if (debouncedFilters.price?.max !== undefined && debouncedFilters.price?.max !== '') {
-            filterParams.append('max_price', debouncedFilters.price.max)
-          }
-          
-          // Availability filter
-          if (debouncedFilters.availability instanceof Set) {
-            if (debouncedFilters.availability.has('in') && !debouncedFilters.availability.has('out')) {
-              filterParams.append('in_stock', 'true')
-            } else if (debouncedFilters.availability.has('out') && !debouncedFilters.availability.has('in')) {
-              filterParams.append('in_stock', 'false')
-            }
-          }
-          
-          // Rating filter
-          if (typeof debouncedFilters.rating === 'number') {
-            filterParams.append('min_rating', debouncedFilters.rating)
-          }
-          
-          // Brand filter from filters (multiple) - brands should navigate to their own page, not watches
-          // Only apply brand filter if user manually selects it from filters
-          if (debouncedFilters.brand instanceof Set && debouncedFilters.brand.size > 0) {
-            // Brand filter from filters (multiple)
-            Array.from(debouncedFilters.brand).forEach(b => filterParams.append('brand_id', b))
-          }
-          
-          // Store filter from query params (when clicking icon) - takes priority
-          if (storeId) {
-            filterParams.append('store_id', storeId)
-          } else if (debouncedFilters.store instanceof Set && debouncedFilters.store.size > 0) {
-            // Store filter from filters (multiple)
-            Array.from(debouncedFilters.store).forEach(s => filterParams.append('store_id', s))
-          }
-          
-          // Dynamic attribute filters (attr.*)
-          Object.keys(debouncedFilters).forEach(key => {
-            if (key.startsWith('attr.')) {
-              const attrKey = key.substring(5)
-              const values = debouncedFilters[key] instanceof Set ? Array.from(debouncedFilters[key]) : []
-              values.forEach(v => filterParams.append(`attr_${attrKey}`, v))
-            }
-          })
-          
-          // Dynamic specification filters (spec.*)
-          Object.keys(debouncedFilters).forEach(key => {
-            if (key.startsWith('spec.')) {
-              const specKey = key.substring(5)
-              const values = debouncedFilters[key] instanceof Set ? Array.from(debouncedFilters[key]) : []
-              values.forEach(v => filterParams.append(`spec_${specKey}`, v))
-            }
-          })
-          
-          const url = filterParams.toString() 
-            ? `${search.categoryFilters(slug, categoryLevel)}&${filterParams.toString()}`
-            : search.categoryFilters(slug, categoryLevel)
-          
-          const response = await fetch(url)
+          const response = await fetch(search.categoryFilters(slug, categoryLevel))
           if (response.ok) {
             const data = await response.json()
             console.log('Category Filter API Response:', data)
@@ -300,7 +244,20 @@ export default function BrandPage() {
     }
 
     fetchFilterData()
-  }, [slug, categoryLevel, storeId, categoryId, source, debouncedFilters])
+    // Category and brand: do not depend on debouncedFilters so filter options stay stable (same as brand)
+  }, [slug, categoryLevel, storeId, categoryId, source])
+
+  // Sync selectedFilters from URL so store shows as selected when storeId is in URL
+  useEffect(() => {
+    if (!storeId) return
+    setSelectedFilters(prev => {
+      const storeSet = prev.store instanceof Set ? new Set(prev.store) : new Set()
+      const alreadyHas = Array.from(storeSet).some(s => String(s) === String(storeId))
+      if (alreadyHas) return prev
+      storeSet.add(storeId)
+      return { ...prev, store: storeSet }
+    })
+  }, [storeId])
 
   // Debounce filter changes to allow multiple selections
   useEffect(() => {
@@ -311,12 +268,17 @@ export default function BrandPage() {
     return () => clearTimeout(timer)
   }, [selectedFilters])
 
-  // Reset pagination when debounced filters change
+  // Reset pagination and clear stale data when filters or navigation changes
   useEffect(() => {
     setCurrentPage(1)
     setPaginationInfo(null)
     setBrandProducts([])
     isFetchingRef.current = false // Reset fetch lock when filters change
+    
+    // Clear level2Category and brandInfo immediately when slug changes to prevent showing stale data
+    // This ensures no old category data shows when navigating between categories
+    setLevel2Category(null)
+    setBrandInfo(null)
   }, [debouncedFilters, slug, storeId, categoryLevel, source, categoryId])
 
   // Fetch brand/store/category info and products by slug
@@ -337,6 +299,11 @@ export default function BrandPage() {
         // Clear products immediately when starting to fetch new page
         // This ensures old products don't show while new ones are loading
         setBrandProducts([])
+        
+        // Clear level2Category and brandInfo immediately when slug changes
+        // This prevents showing stale category data during navigation
+        setLevel2Category(null)
+        setBrandInfo(null)
 
         // Check if this is a store (has storeId parameter or source parameter), category (has categoryLevel), or a brand
         // If source is present (hypermarket/supermarket), it's definitely a store
@@ -431,7 +398,7 @@ export default function BrandPage() {
               
               // Add pagination params
               params.append('page', currentPage.toString())
-              params.append('limit', '20')
+              params.append('limit', '21')
               
               // Add sort parameter
               params.append('sort', sortBy)
@@ -491,7 +458,7 @@ export default function BrandPage() {
                     level4: cleanedCategoryId,
                     storeId: actualStoreId, // For hypermarket/supermarket/store
                     page: currentPage,
-                    limit: 20,
+                    limit: 21,
                     sort: sortBy,
                     in_stock: true
                   };
@@ -547,15 +514,15 @@ export default function BrandPage() {
                     }
                   });
                   
-                  const url = search.productsByLevel4(unifiedParams);
-                  console.log('Using unified level4 API with params:', unifiedParams);
+                  const url = catalog.productsByLevel4AndStore(unifiedParams);
+                  console.log('Using level4 and store API with params:', unifiedParams);
                   console.log('Fetching from URL:', url);
                   
                   const response = await fetch(url);
                   
                   if (response.ok) {
                     const data = await response.json();
-                    console.log('Unified level4 API Response:', data);
+                    console.log('Level4 and Store API Response:', data);
                     
                     if (data.success && data.data) {
                       // Set store info if we fetched it separately, otherwise try from first product
@@ -580,17 +547,8 @@ export default function BrandPage() {
                         }
                       }
                       
-                      let newProducts = data.data.products || [];
-                      
-                      // Filter products by store_id if storeId is present (when on a store page)
-                      if (storeId && newProducts.length > 0) {
-                        newProducts = newProducts.filter(product => {
-                          // Check if product has store_id and it matches the current storeId
-                          const productStoreId = product.store_id?._id || product.store_id;
-                          return productStoreId === storeId || String(productStoreId) === String(storeId);
-                        });
-                        console.log(`Filtered products by store_id ${storeId}: ${newProducts.length} products found`);
-                      }
+                      // Products are already filtered by store_id in the API, no need to filter again
+                      const newProducts = data.data.products || [];
                       
                       console.log('Received products:', newProducts.length);
                       setBrandProducts(newProducts);
@@ -602,7 +560,7 @@ export default function BrandPage() {
                       setBrandProducts([]);
                     }
                   } else {
-                    console.error('Unified level4 API error:', response.status, response.statusText);
+                    console.error('Level4 and Store API error:', response.status, response.statusText);
                     const errorText = await response.text();
                     console.error('Error response body:', errorText);
                     setBrandProducts([]);
@@ -712,140 +670,301 @@ export default function BrandPage() {
             setIsStore(false)
             setIsCategory(true)
             
-            // Build filter params
-            const params = new URLSearchParams()
-            
-            // Add pagination params
-            params.append('page', currentPage.toString())
-            params.append('limit', '20')
-            
-            // Add sort parameter
-            params.append('sort', sortBy)
-            
-            // Price filter
-            if (debouncedFilters.price?.min !== undefined && debouncedFilters.price?.min !== '') {
-              params.append('min_price', debouncedFilters.price.min)
-            }
-            if (debouncedFilters.price?.max !== undefined && debouncedFilters.price?.max !== '') {
-              params.append('max_price', debouncedFilters.price.max)
-            }
-            
-            // Availability filter
-            if (debouncedFilters.availability instanceof Set) {
-              if (debouncedFilters.availability.has('in') && !debouncedFilters.availability.has('out')) {
-                params.append('in_stock', 'true')
-              } else if (debouncedFilters.availability.has('out') && !debouncedFilters.availability.has('in')) {
-                params.append('in_stock', 'false')
-              }
-            }
-            
-            // Rating filter
-            if (typeof debouncedFilters.rating === 'number') {
-              params.append('min_rating', debouncedFilters.rating)
-            }
-            
-            // Brand filter from filters (multiple) - brands should navigate to their own page, not watches
-            // Only apply brand filter if user manually selects it from filters, not from URL
-            if (debouncedFilters.brand instanceof Set && debouncedFilters.brand.size > 0) {
-              // Brand filter from filters (multiple)
-              Array.from(debouncedFilters.brand).forEach(b => params.append('brand_id', b))
-            }
-            
-            // Store filter from query params (when clicking icon) - takes priority
-            if (storeId) {
-              params.append('store_id', storeId)
-            } else if (debouncedFilters.store instanceof Set && debouncedFilters.store.size > 0) {
-              // Store filter from filters (multiple)
-              Array.from(debouncedFilters.store).forEach(s => params.append('store_id', s))
-            }
-            
-            // Dynamic attribute filters (attr.*)
-            Object.keys(debouncedFilters).forEach(key => {
-              if (key.startsWith('attr.')) {
-                const attrKey = key.substring(5)
-                const values = debouncedFilters[key] instanceof Set ? Array.from(debouncedFilters[key]) : []
-                values.forEach(v => params.append(`attr_${attrKey}`, v))
-              }
-            })
-            
-            // Dynamic specification filters (spec.*)
-            Object.keys(debouncedFilters).forEach(key => {
-              if (key.startsWith('spec.')) {
-                const specKey = key.substring(5)
-                const values = debouncedFilters[key] instanceof Set ? Array.from(debouncedFilters[key]) : []
-                values.forEach(v => params.append(`spec_${specKey}`, v))
-              }
-            })
-            
-            // Fetch category products with filters
-            // If category_id is provided, use it instead of slug for filtering
-            // The API endpoint uses slug to find category, but we can override with category_id filter
-            let categorySlug = slug;
-            if (categoryId && categoryLevel === '4') {
-              // When category_id is provided, we still need to use a valid level4 category slug
-              // But we'll add level4 filter to restrict to that specific category
-              params.append('level4', categoryId);
-            }
-            
-            const url = params.toString() 
-              ? `${catalog.productsByLevel4Category(categorySlug)}?${params.toString()}`
-              : catalog.productsByLevel4Category(categorySlug)
-            
-            console.log('Fetching category products with URL:', url);
-            console.log('Category Level:', categoryLevel);
-            console.log('Slug:', slug);
-            
-            const response = await fetch(url)
-
-            if (response.ok) {
-              const data = await response.json()
-              console.log('Category API Response:', data)
-
-              if (data.success && data.data) {
-                if (currentPage === 1) {
-                  const categoryData = data.data.category;
-                  // Always try to extract level2 from first product for breadcrumb
-                  const firstProduct = data.data.products?.[0];
-                  if (firstProduct?.level2) {
-                    const level2Entry = buildLevel2Entry(firstProduct.level2);
-                    if (level2Entry?.name) {
-                      setLevel2Category(level2Entry);
-                      console.log('Extracted level2 from product for category page:', level2Entry.name);
-                      
-                      // Also add level2 to category path if not present
-                      if (categoryData && (!categoryData.path?.level2 || categoryData.path.level2.length === 0)) {
-                        if (!categoryData.path) {
-                          categoryData.path = {};
-                        }
-                        if (!categoryData.path.level2) {
-                          categoryData.path.level2 = [];
-                        }
-                        if (!categoryData.path.level2.includes(level2Entry.name)) {
-                          categoryData.path.level2.push(level2Entry.name);
-                        }
+            try {
+              // For level4 categories, get the category ID from slug if not provided
+              let level4CategoryId = categoryId;
+              let level4CategoryData = null;
+              
+              if (categoryLevel === '4') {
+                if (!level4CategoryId && slug) {
+                  // Fetch category by slug to get the ID
+                  try {
+                    const categoryResponse = await fetch(catalog.categoryBySlug(slug));
+                    if (categoryResponse.ok) {
+                      const categoryData = await categoryResponse.json();
+                      if (categoryData.success && categoryData.data && categoryData.data._id && categoryData.data.level === 4) {
+                        level4CategoryId = categoryData.data._id;
+                        level4CategoryData = categoryData.data;
+                        console.log('Fetched level4 category ID from slug:', level4CategoryId);
                       }
                     }
+                  } catch (error) {
+                    console.error('Error fetching category by slug:', error);
                   }
-                  setBrandInfo(categoryData) // Category info with enhanced path
                 }
-                
-                let newProducts = data.data.products || []
-                
-                // Filter products by store_id if storeId is present (when on a store page)
-                if (storeId && newProducts.length > 0) {
-                  newProducts = newProducts.filter(product => {
-                    // Check if product has store_id and it matches the current storeId
-                    const productStoreId = product.store_id?._id || product.store_id;
-                    return productStoreId === storeId || String(productStoreId) === String(storeId);
-                  });
-                  console.log(`Filtered products by store_id ${storeId}: ${newProducts.length} products found`);
-                }
-                
-                setBrandProducts(newProducts)
-
-                const pagination = data.data.pagination
-                setPaginationInfo(pagination || null)
               }
+              
+              // Only use store ID from query params for category pages
+              const actualStoreId = storeId;
+              
+              // If we have both level4 ID and store ID, use the new endpoint
+              if (categoryLevel === '4' && level4CategoryId && actualStoreId) {
+                // Clean and validate the category ID
+                const cleanedCategoryId = String(level4CategoryId).trim().split(/\s+/)[0];
+                const cleanedStoreId = String(actualStoreId).trim().split(/\s+/)[0];
+                
+                if (cleanedCategoryId && /^[0-9a-fA-F]{24}$/.test(cleanedCategoryId) && 
+                    cleanedStoreId && /^[0-9a-fA-F]{24}$/.test(cleanedStoreId)) {
+                  
+                  // Use the new level4 and store API endpoint
+                  const unifiedParams = {
+                    level4: cleanedCategoryId,
+                    storeId: cleanedStoreId,
+                    page: currentPage,
+                    limit: 21,
+                    sort: sortBy
+                  };
+                  
+                  // Add price filters
+                  if (debouncedFilters.price?.min !== undefined && debouncedFilters.price?.min !== '') {
+                    unifiedParams.min_price = debouncedFilters.price.min;
+                  }
+                  if (debouncedFilters.price?.max !== undefined && debouncedFilters.price?.max !== '') {
+                    unifiedParams.max_price = debouncedFilters.price.max;
+                  }
+                  
+                  // Add availability filter
+                  if (debouncedFilters.availability instanceof Set) {
+                    if (debouncedFilters.availability.has('in') && !debouncedFilters.availability.has('out')) {
+                      unifiedParams.in_stock = true;
+                    } else if (debouncedFilters.availability.has('out') && !debouncedFilters.availability.has('in')) {
+                      unifiedParams.in_stock = false;
+                    }
+                  }
+                  
+                  // Add rating filter
+                  if (typeof debouncedFilters.rating === 'number') {
+                    unifiedParams.min_rating = debouncedFilters.rating;
+                  }
+                  
+                  // Add brand filter (multiple)
+                  if (debouncedFilters.brand instanceof Set && debouncedFilters.brand.size > 0) {
+                    unifiedParams.brand_id = Array.from(debouncedFilters.brand);
+                  }
+                  
+                  // Add dynamic attribute filters
+                  Object.keys(debouncedFilters).forEach(key => {
+                    if (key.startsWith('attr.')) {
+                      const attrKey = key.substring(5);
+                      const values = debouncedFilters[key] instanceof Set ? Array.from(debouncedFilters[key]) : [];
+                      if (values.length > 0) {
+                        if (!unifiedParams.attributes) unifiedParams.attributes = {};
+                        unifiedParams.attributes[attrKey] = values;
+                      }
+                    }
+                  });
+                  
+                  // Add dynamic specification filters
+                  Object.keys(debouncedFilters).forEach(key => {
+                    if (key.startsWith('spec.')) {
+                      const specKey = key.substring(5);
+                      const values = debouncedFilters[key] instanceof Set ? Array.from(debouncedFilters[key]) : [];
+                      if (values.length > 0) {
+                        if (!unifiedParams.specifications) unifiedParams.specifications = {};
+                        unifiedParams.specifications[specKey] = values;
+                      }
+                    }
+                  });
+                  
+                  const url = catalog.productsByLevel4AndStore(unifiedParams);
+                  console.log('Using level4 and store API for category page with params:', unifiedParams);
+                  console.log('Fetching from URL:', url);
+                  
+                  const response = await fetch(url);
+                  
+                  if (response.ok) {
+                    const data = await response.json();
+                    console.log('Level4 and Store API Response (category page):', data);
+                    
+                    if (data.success && data.data) {
+                      if (currentPage === 1) {
+                        // Use category data from API response or fetched data
+                        const categoryData = data.data.category || level4CategoryData;
+                        if (categoryData) {
+                          setBrandInfo(categoryData);
+                        }
+                        
+                        // Extract level2 from first product for breadcrumb
+                        const firstProduct = data.data.products?.[0];
+                        if (firstProduct?.level2) {
+                          const level2Entry = buildLevel2Entry(firstProduct.level2);
+                          if (level2Entry?.name) {
+                            setLevel2Category(level2Entry);
+                            console.log('Extracted level2 from product for category page:', level2Entry.name);
+                          }
+                        }
+                      }
+                      
+                      // Products are already filtered by store_id in the API
+                      const newProducts = data.data.products || [];
+                      console.log('Received products:', newProducts.length);
+                      setBrandProducts(newProducts);
+                      
+                      const pagination = data.data.pagination;
+                      setPaginationInfo(pagination || null);
+                    } else {
+                      console.warn('API response not successful:', data);
+                      setBrandProducts([]);
+                    }
+                  } else {
+                    console.error('Level4 and Store API error:', response.status, response.statusText);
+                    const errorText = await response.text();
+                    console.error('Error response body:', errorText);
+                    setBrandProducts([]);
+                  }
+                  
+                  setLoadingProducts(false);
+                  isFetchingRef.current = false;
+                  return; // Exit early since we've handled the request
+                }
+              }
+              
+              // Fallback to old endpoint if we don't have both level4 ID and store ID
+              // Build filter params
+              const params = new URLSearchParams()
+              
+              // Add pagination params
+              params.append('page', currentPage.toString())
+              params.append('limit', '21')
+              
+              // Add sort parameter
+              params.append('sort', sortBy)
+              
+              // Price filter
+              if (debouncedFilters.price?.min !== undefined && debouncedFilters.price?.min !== '') {
+                params.append('min_price', debouncedFilters.price.min)
+              }
+              if (debouncedFilters.price?.max !== undefined && debouncedFilters.price?.max !== '') {
+                params.append('max_price', debouncedFilters.price.max)
+              }
+              
+              // Availability filter
+              if (debouncedFilters.availability instanceof Set) {
+                if (debouncedFilters.availability.has('in') && !debouncedFilters.availability.has('out')) {
+                  params.append('in_stock', 'true')
+                } else if (debouncedFilters.availability.has('out') && !debouncedFilters.availability.has('in')) {
+                  params.append('in_stock', 'false')
+                }
+              }
+              
+              // Rating filter
+              if (typeof debouncedFilters.rating === 'number') {
+                params.append('min_rating', debouncedFilters.rating)
+              }
+              
+              // Brand filter from filters (multiple)
+              if (debouncedFilters.brand instanceof Set && debouncedFilters.brand.size > 0) {
+                Array.from(debouncedFilters.brand).forEach(b => params.append('brand_id', b))
+              }
+              
+              // Store filter from query params (when clicking icon)
+              if (storeId) {
+                params.append('store_id', storeId)
+              }
+              
+              // Store type filter (hypermarket, supermarket, e-shop) - filters by level1 category
+              if (storeType) {
+                params.append('storeType', storeType)
+              }
+              
+              // Dynamic attribute filters (attr.*)
+              Object.keys(debouncedFilters).forEach(key => {
+                if (key.startsWith('attr.')) {
+                  const attrKey = key.substring(5)
+                  const values = debouncedFilters[key] instanceof Set ? Array.from(debouncedFilters[key]) : []
+                  values.forEach(v => params.append(`attr_${attrKey}`, v))
+                }
+              })
+              
+              // Dynamic specification filters (spec.*)
+              Object.keys(debouncedFilters).forEach(key => {
+                if (key.startsWith('spec.')) {
+                  const specKey = key.substring(5)
+                  const values = debouncedFilters[key] instanceof Set ? Array.from(debouncedFilters[key]) : []
+                  values.forEach(v => params.append(`spec_${specKey}`, v))
+                }
+              })
+              
+              // Fetch category products with filters
+              let categorySlug = slug;
+              if (level4CategoryId && categoryLevel === '4') {
+                params.append('level4', level4CategoryId);
+              }
+              
+              const url = params.toString() 
+                ? `${catalog.productsByLevel4Category(categorySlug)}?${params.toString()}`
+                : catalog.productsByLevel4Category(categorySlug)
+              
+              console.log('Fetching category products with URL (fallback):', url);
+              console.log('Category Level:', categoryLevel);
+              console.log('Slug:', slug);
+              
+              const response = await fetch(url)
+
+              if (response.ok) {
+                const data = await response.json()
+                console.log('Category API Response:', data)
+
+                if (data.success && data.data) {
+                  if (currentPage === 1) {
+                    const categoryData = data.data.category || level4CategoryData;
+                    if (categoryData) {
+                      // Always try to extract level2 from first product for breadcrumb
+                      const firstProduct = data.data.products?.[0];
+                      if (firstProduct?.level2) {
+                        const level2Entry = buildLevel2Entry(firstProduct.level2);
+                        if (level2Entry?.name) {
+                          setLevel2Category(level2Entry);
+                          console.log('Extracted level2 from product for category page:', level2Entry.name);
+                          
+                          // Also add level2 to category path if not present
+                          if (categoryData && (!categoryData.path?.level2 || categoryData.path.level2.length === 0)) {
+                            if (!categoryData.path) {
+                              categoryData.path = {};
+                            }
+                            if (!categoryData.path.level2) {
+                              categoryData.path.level2 = [];
+                            }
+                            if (!categoryData.path.level2.includes(level2Entry.name)) {
+                              categoryData.path.level2.push(level2Entry.name);
+                            }
+                          }
+                        }
+                      }
+                      setBrandInfo(categoryData) // Category info with enhanced path
+                    }
+                  }
+                  
+                  let newProducts = data.data.products || []
+                  
+                  // Filter by selected store(s): multiple stores from filter, or single storeId from URL
+                  if (newProducts.length > 0) {
+                    const storeSet = debouncedFilters.store instanceof Set && debouncedFilters.store.size > 0 ? debouncedFilters.store : null
+                    if (storeSet && storeSet.size > 0) {
+                      const idSet = new Set(Array.from(storeSet).map(s => String(s)))
+                      newProducts = newProducts.filter(p => idSet.has(String(p.store_id?._id || p.store_id)))
+                      console.log(`Filtered products by ${storeSet.size} store(s): ${newProducts.length} products found`)
+                    } else if (storeId) {
+                      newProducts = newProducts.filter(product => {
+                        const productStoreId = product.store_id?._id || product.store_id
+                        return productStoreId === storeId || String(productStoreId) === String(storeId)
+                      })
+                      console.log(`Filtered products by store_id ${storeId}: ${newProducts.length} products found`)
+                    }
+                  }
+                  
+                  setBrandProducts(newProducts)
+
+                  const pagination = data.data.pagination
+                  setPaginationInfo(pagination || null)
+                }
+              }
+            } catch (error) {
+              console.error('Error fetching category products:', error);
+              setBrandProducts([]);
+            } finally {
+              setLoadingProducts(false);
+              isFetchingRef.current = false;
             }
           } else {
             setIsStore(false)
@@ -856,7 +975,7 @@ export default function BrandPage() {
             
             // Add pagination params
             params.append('page', currentPage.toString())
-            params.append('limit', '20')
+            params.append('limit', '21')
             
             // Add sort parameter
             params.append('sort', sortBy)
@@ -934,14 +1053,20 @@ export default function BrandPage() {
                 
                 let newProducts = data.data.products || []
                 
-                // Filter products by store_id if storeId is present (when on a store page)
-                if (storeId && newProducts.length > 0) {
-                  newProducts = newProducts.filter(product => {
-                    // Check if product has store_id and it matches the current storeId
-                    const productStoreId = product.store_id?._id || product.store_id;
-                    return productStoreId === storeId || String(productStoreId) === String(storeId);
-                  });
-                  console.log(`Filtered products by store_id ${storeId}: ${newProducts.length} products found`);
+                // Filter by selected store(s): multiple stores from filter, or single storeId from URL
+                if (newProducts.length > 0) {
+                  const storeSet = debouncedFilters.store instanceof Set && debouncedFilters.store.size > 0 ? debouncedFilters.store : null
+                  if (storeSet && storeSet.size > 0) {
+                    const idSet = new Set(Array.from(storeSet).map(s => String(s)))
+                    newProducts = newProducts.filter(p => idSet.has(String(p.store_id?._id || p.store_id)))
+                    console.log(`Filtered products by ${storeSet.size} store(s): ${newProducts.length} products found`)
+                  } else if (storeId) {
+                    newProducts = newProducts.filter(product => {
+                      const productStoreId = product.store_id?._id || product.store_id
+                      return productStoreId === storeId || String(productStoreId) === String(storeId)
+                    })
+                    console.log(`Filtered products by store_id ${storeId}: ${newProducts.length} products found`)
+                  }
                 }
                 
                 setBrandProducts(newProducts)
@@ -962,8 +1087,24 @@ export default function BrandPage() {
     fetchData()
   }, [slug, storeId, categoryLevel, categoryId, source, debouncedFilters, currentPage, sortBy])
 
-  // Transform API data
-  const transformedProducts = brandProducts.map(transformProductData)
+  // Transform API data; when sorting by price, sort by discounted price with VAT (effective price) on the frontend
+  const transformedProducts = useMemo(() => {
+    const getEffectivePriceWithVat = (p) => {
+      const discountWithVat = p.discount_price_with_vat != null && Number(p.discount_price_with_vat) > 0 ? Number(p.discount_price_with_vat) : null
+      if (discountWithVat !== null) return discountWithVat
+      const priceWithVat = p.price_with_vat != null ? Number(p.price_with_vat) : null
+      return priceWithVat !== null ? priceWithVat : (Number(p.price) || 0)
+    }
+    if (sortBy === 'price_asc' || sortBy === 'price_desc') {
+      const sorted = [...brandProducts].sort((a, b) => {
+        const pa = getEffectivePriceWithVat(a)
+        const pb = getEffectivePriceWithVat(b)
+        return sortBy === 'price_asc' ? pa - pb : pb - pa
+      })
+      return sorted.map(transformProductData)
+    }
+    return brandProducts.map(transformProductData)
+  }, [brandProducts, sortBy])
 
   // Build facets from filter API response for category, brand, or store pages
   const facets = useMemo(() => {
@@ -986,17 +1127,35 @@ export default function BrandPage() {
     return []
   }, [isCategory, isStore, filterData])
 
+  const totalResults = useMemo(() => {
+    if (typeof paginationInfo?.total === 'number') {
+      return paginationInfo.total
+    }
+    return brandProducts.length
+  }, [paginationInfo?.total, brandProducts.length])
+
   const totalPages = useMemo(() => {
     if (paginationInfo?.pages) {
       return Math.max(1, paginationInfo.pages)
     }
 
     if (paginationInfo?.total) {
-      return Math.max(1, Math.ceil(paginationInfo.total / 20))
+      return Math.max(1, Math.ceil(paginationInfo.total / 21))
     }
 
     return 1
   }, [paginationInfo])
+
+  // Calculate the range of products displayed on current page
+  const productRange = useMemo(() => {
+    if (totalResults === 0 || brandProducts.length === 0) {
+      return { start: 0, end: 0 }
+    }
+    const pageSize = 21
+    const start = (currentPage - 1) * pageSize + 1
+    const end = Math.min(currentPage * pageSize, totalResults)
+    return { start, end }
+  }, [currentPage, totalResults, brandProducts.length])
 
   const pageNumbers = useMemo(() => {
     // Show only 3 buttons at a time with sliding window
@@ -1083,19 +1242,57 @@ export default function BrandPage() {
   useEffect(() => {
     const buildBreadcrumb = () => {
       const path = []
-      path.push({ label: 'Home', href: '/' })
+      path.push({ label: 'Discovery', href: '/' })
 
+      // Helper function to create slug from name
+      const createSlugFromName = (name) => {
+        if (!name) return null
+        return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      }
+
+      // For level2 categories, navigate to category page (shows level4 categories) not product listing
+      // Try to get slug from brandInfo.level2 object
       const level2SlugFromBrand =
         brandInfo?.level2 &&
         typeof brandInfo.level2 !== 'string' &&
         brandInfo.level2?.slug
-          ? `/${brandInfo.level2.slug}`
+          ? `/category/${brandInfo.level2.slug}`
           : null
-      const level2SlugFromState = level2Category?.slug ? `/${level2Category.slug}` : null
-      const level2Href = level2SlugFromBrand || level2SlugFromState || null
+      
+      // Try to get slug from level2Category state
+      const level2SlugFromState = level2Category?.slug ? `/category/${level2Category.slug}` : null
+      
+      // Try to get slug from brandInfo.level2 if it's an object with slug
+      const level2SlugFromBrandObject = 
+        brandInfo?.level2 &&
+        typeof brandInfo.level2 === 'object' &&
+        brandInfo.level2?.slug
+          ? `/category/${brandInfo.level2.slug}`
+          : null
+      
+      // Get level2 name for fallback slug generation
+      let level2NameForSlug = null
+      if (brandInfo?.level2) {
+        if (typeof brandInfo.level2 === 'string') {
+          level2NameForSlug = brandInfo.level2
+        } else if (brandInfo.level2?.name) {
+          level2NameForSlug = brandInfo.level2.name
+        }
+      } else if (level2Category?.name) {
+        level2NameForSlug = level2Category.name
+      } else if (brandInfo?.path?.level2 && Array.isArray(brandInfo.path.level2) && brandInfo.path.level2.length > 0) {
+        level2NameForSlug = brandInfo.path.level2[0]
+      }
+      
+      // Create fallback href from name if we have name but no slug
+      const level2HrefFromName = level2NameForSlug ? `/category/${createSlugFromName(level2NameForSlug)}` : null
+      
+      // Priority: slug from brandInfo.level2 object > slug from level2Category > slug from name
+      const level2Href = level2SlugFromBrand || level2SlugFromState || level2SlugFromBrandObject || level2HrefFromName || null
 
       if (isStore && brandInfo) {
-        if (level2Category?.name) {
+        // Only show level2Category if we're not on a level4 page or if we have proper store data
+        if (level2Category?.name && categoryLevel !== '4') {
           path.push({
             label: level2Category.name,
             href: level2Href
@@ -1109,16 +1306,32 @@ export default function BrandPage() {
         let level2Name = null
         let level4Name = null
 
-        if (brandInfo.path?.level2 && Array.isArray(brandInfo.path.level2) && brandInfo.path.level2.length > 0) {
-          level2Name = brandInfo.path.level2[0]
-        } else if (brandInfo.level2) {
-          if (typeof brandInfo.level2 === 'string') {
-            level2Name = brandInfo.level2
-          } else if (brandInfo.level2?.name) {
-            level2Name = brandInfo.level2.name
+        // For level4 pages, prioritize brandInfo data over stale level2Category
+        if (categoryLevel === '4') {
+          // Only use level2Category if brandInfo doesn't have level2 data
+          if (brandInfo.path?.level2 && Array.isArray(brandInfo.path.level2) && brandInfo.path.level2.length > 0) {
+            level2Name = brandInfo.path.level2[0]
+          } else if (brandInfo.level2) {
+            if (typeof brandInfo.level2 === 'string') {
+              level2Name = brandInfo.level2
+            } else if (brandInfo.level2?.name) {
+              level2Name = brandInfo.level2.name
+            }
           }
-        } else if (level2Category?.name) {
-          level2Name = level2Category.name
+          // Don't use level2Category for level4 pages to avoid showing stale data
+        } else {
+          // For non-level4 pages, use normal logic
+          if (brandInfo.path?.level2 && Array.isArray(brandInfo.path.level2) && brandInfo.path.level2.length > 0) {
+            level2Name = brandInfo.path.level2[0]
+          } else if (brandInfo.level2) {
+            if (typeof brandInfo.level2 === 'string') {
+              level2Name = brandInfo.level2
+            } else if (brandInfo.level2?.name) {
+              level2Name = brandInfo.level2.name
+            }
+          } else if (level2Category?.name) {
+            level2Name = level2Category.name
+          }
         }
 
         if (brandInfo.path?.level4 && Array.isArray(brandInfo.path.level4) && brandInfo.path.level4.length > 0) {
@@ -1134,9 +1347,16 @@ export default function BrandPage() {
         }
 
         if (level2Name) {
+          // Ensure we have a href for level2 - prioritize existing href, otherwise create from level2Name
+          let finalLevel2Href = level2Href
+          // If we don't have a href yet, create one from the level2Name
+          // This handles cases where level2Name comes from brandInfo.path.level2[0] (string array)
+          if (!finalLevel2Href) {
+            finalLevel2Href = `/category/${createSlugFromName(level2Name)}`
+          }
           path.push({
             label: level2Name,
-            href: level2Href
+            href: finalLevel2Href
           })
         }
 
@@ -1154,7 +1374,8 @@ export default function BrandPage() {
           })
         }
       } else if (brandInfo && !isStore && !isCategory) {
-        if (level2Category?.name) {
+        // Only show level2Category if we're not on a level4 page
+        if (level2Category?.name && categoryLevel !== '4') {
           path.push({
             label: level2Category.name,
             href: level2Href
@@ -1172,7 +1393,7 @@ export default function BrandPage() {
     if (brandInfo || isStore || isCategory) {
       buildBreadcrumb()
     }
-  }, [brandInfo, isStore, isCategory, level2Category])
+  }, [brandInfo, isStore, isCategory, level2Category, categoryLevel, slug])
 
   return (
     <main className="home-page">
@@ -1225,9 +1446,6 @@ export default function BrandPage() {
             {/* Main Content Area */}
             <div className="content-area">
               <div className="section-header sticky-header">
-                {/* <h2 className="section-title">
-                  {`${brandInfo?.name || (isStore ? 'Store' : isCategory ? 'Category' : 'Brand')} Products`}
-                </h2> */}
                 <div className="section-actions">
                   {isMobile && (
                     <button 
@@ -1269,34 +1487,41 @@ export default function BrandPage() {
               )}
 
               {!loadingProducts && transformedProducts.length > 0 && totalPages > 1 && (
-                <div className="pagination-controls" role="navigation" aria-label="Products pagination">
-                  <button
-                    type="button"
-                    className="pagination-button"
-                    onClick={handlePreviousPage}
-                    disabled={currentPage === 1}
-                  >
-                    Previous
-                  </button>
-                  {pageNumbers.map((page) => (
+                <div className="pagination-wrapper">
+                  <div className="pagination-controls" role="navigation" aria-label="Products pagination">
                     <button
-                      key={page}
                       type="button"
-                      className={`pagination-button ${page === currentPage ? 'active' : ''}`}
-                      onClick={() => handlePageChangeLocal(page)}
-                      aria-current={page === currentPage ? 'page' : undefined}
+                      className="pagination-button"
+                      onClick={handlePreviousPage}
+                      disabled={currentPage === 1}
                     >
-                      {page}
+                      Previous
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    className="pagination-button"
-                    onClick={handleNextPage}
-                    disabled={currentPage === totalPages}
-                  >
-                    Next
-                  </button>
+                    {pageNumbers.map((page) => (
+                      <button
+                        key={page}
+                        type="button"
+                        className={`pagination-button ${page === currentPage ? 'active' : ''}`}
+                        onClick={() => handlePageChangeLocal(page)}
+                        aria-current={page === currentPage ? 'page' : undefined}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="pagination-button"
+                      onClick={handleNextPage}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </button>
+                  </div>
+                  {totalResults > 0 && (
+                    <span className="pagination-count">
+                      {productRange.start} - {productRange.end} products out of {totalResults}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -1358,18 +1583,24 @@ export default function BrandPage() {
 
         .breadcrumb-link {
           color: #0082FF;
+          font-weight: 600;
+          font-size: 12px;
           text-decoration: none;
           transition: color 0.2s ease;
         }
 
-        .breadcrumb-link:hover {
+        .breadcrumb-current:hover, .breadcrumb-link:hover {
           color: #0066cc;
           text-decoration: underline;
         }
 
         .breadcrumb-current {
-          color: #111827;
-          font-weight: 500;
+          color: #0082FF;
+          font-weight: 600;
+          font-size: 12px;
+          text-decoration: none;
+          cursor: pointer;
+          transition: color 0.2s ease;
         }
 
         .listing-layout {
@@ -1537,13 +1768,30 @@ export default function BrandPage() {
           100% { transform: rotate(360deg); }
         }
 
+        .pagination-wrapper {
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          gap: 12px;
+          margin-top: 32px;
+        }
+
         .pagination-controls {
           display: flex;
           justify-content: center;
           align-items: center;
           gap: 8px;
-          margin-top: 32px;
           flex-wrap: wrap;
+        }
+
+        .pagination-count {
+          color: #6b7280;
+          font-family: 'DM Sans', -apple-system, Roboto, Helvetica, sans-serif;
+          font-size: 14px;
+          font-weight: 400;
+          line-height: 140%;
+          white-space: nowrap;
         }
 
         .pagination-button {
@@ -1615,15 +1863,6 @@ export default function BrandPage() {
           padding-left: 24px;
         }
 
-        .section-title {
-          color: #000;
-          font-family: 'DM Sans', -apple-system, Roboto, Helvetica, sans-serif;
-          font-size: 40px;
-          font-weight: 700;
-          line-height: 120%;
-          margin: 0;
-        }
-
         .section-actions {
           display: flex;
           align-items: center;
@@ -1641,13 +1880,11 @@ export default function BrandPage() {
 
         @media (max-width: 768px) {
           .section-header {
-            flex-direction: column;
-            gap: 16px;
-            align-items: flex-start;
+            justify-content: flex-start;
           }
-
-          .section-title {
-            font-size: 28px;
+          
+          .pagination-count {
+            font-size: 13px;
           }
 
           /* Ensure product grid stays centered on mobile */

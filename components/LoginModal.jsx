@@ -254,8 +254,8 @@ export default function LoginModal({ open, onClose, onOpenForgotPassword, onOpen
         }
         .login-modal-close {
           position: absolute;
-          top: 24px;
-          right: 24px;
+          top: 10px;
+          right: 10px;
           background: none;
           border: none;
           cursor: pointer;
@@ -445,22 +445,40 @@ export default function LoginModal({ open, onClose, onOpenForgotPassword, onOpen
           object-fit: cover;
         }
         @media (max-width: 900px) {
+          .login-modal {
+            max-width: 600px;
+            width: 95%;
+          }
           .login-modal-content {
             flex-direction: column;
+            height: auto;
           }
-          .login-modal-left, .login-modal-right {
+          .login-modal-right {
+            display: none;
+          }
+          .login-modal-left {
             padding: 32px;
+          }
+          .login-btn-row {
+            width: 100%;
+          }
+          .login-create-btn,
+          .login-btn {
+            min-width: 0;
+            flex: 1;
+            padding: 12px;
           }
         }
         @media (max-width: 600px) {
           .login-modal {
             border-radius: 16px;
+            width: 92%;
           }
-          .login-modal-content {
-            min-height: 0;
+          .login-modal-left {
+            padding: 24px 20px;
           }
-          .login-modal-left, .login-modal-right {
-            padding: 16px;
+          .login-title {
+            font-size: 32px;
           }
         }
       `}</style>
