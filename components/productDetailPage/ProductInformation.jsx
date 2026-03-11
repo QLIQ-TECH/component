@@ -193,7 +193,7 @@ export default function FAQ() {
           }
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 767px) {
           .faq-section {
             padding: 20px;
             gap: 40px;

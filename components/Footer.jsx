@@ -374,25 +374,101 @@ export default function Footer() {
         }
 
         /* Responsive Design */
-        @media (max-width: 1024px) {
-          .footer-top {
-            flex-direction: column;
-            gap: 30px;
+        @media (max-width: 1200px) and (min-width: 700px) {
+          .footer {
+            padding: 40px 24px 100px 24px;
+            width: 100%;
+            box-sizing: border-box;
+            align-items: stretch;
           }
 
-          .footer-branding,
+          .footer-content {
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+          }
+
+          .footer-top {
+            justify-content: space-between;
+            gap: 20px;
+          }
+
+          .footer-branding {
+            max-width: 45%;
+          }
+          
           .newsletter-section {
-            max-width: none;
+            max-width: 50%;
+          }
+
+          .input-group {
+            flex-wrap: wrap;
+          }
+
+          .newsletter-input {
+            flex: 1 1 calc(50% - 6px);
+            min-width: 140px;
+          }
+
+          .join-button {
+            flex: 1 1 100%;
           }
 
           .footer-navigation {
-            gap: 32px;
+            gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+          }
+          
+          .nav-link {
+            font-size: 13px;
+          }
+          
+          .footer-description {
+            font-size: 13px;
+          }
+
+          .white-line-divider {
+            display: block !important;
+            width: 100% !important;
+            height: 2px !important;
+            background: #fff !important;
+            margin: 20px 0 !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+          }
+
+          .footer-bottom {
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            width: 100% !important;
+            flex-direction: row !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            position: relative !important;
+            z-index: 50 !important;
+            margin-top: 10px !important;
+          }
+
+          .copyright {
+            display: block !important;
+            visibility: visible !important;
+            color: #fff !important;
+          }
+
+          .social-media {
+            display: flex !important;
+            gap: 16px !important;
+            align-items: center !important;
+            visibility: visible !important;
+            flex-direction: row !important;
+            position: relative !important;
+            z-index: 50 !important;
           }
         }
 
-        @media (max-width: 768px) {
-          .footer {
-            padding: 40px 24px 30px;
+        @media (max-width: 699px) {
           }
 
           .footer-content {

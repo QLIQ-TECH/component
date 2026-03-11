@@ -224,8 +224,22 @@ export default function Home() {
             <Swiper
               ref={fastestDeliverySwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={1.2}
+              spaceBetween={16}
+              breakpoints={{
+                768: {
+                  slidesPerView: 4,
+                  spaceBetween: 16,
+                },
+                1024: {
+                  slidesPerView: 4,
+                  spaceBetween: 16,
+                },
+                1200: {
+                  slidesPerView: 'auto',
+                  spaceBetween: 24,
+                }
+              }}
               grabCursor={true}
               freeMode={true}
               className="bestsellers-swiper"
@@ -277,8 +291,22 @@ export default function Home() {
             <Swiper
               ref={bestCheapDealsSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={1.2}
+              spaceBetween={16}
+              breakpoints={{
+                768: {
+                  slidesPerView: 4,
+                  spaceBetween: 16,
+                },
+                1024: {
+                  slidesPerView: 4,
+                  spaceBetween: 16,
+                },
+                1200: {
+                  slidesPerView: 'auto',
+                  spaceBetween: 24,
+                }
+              }}
               grabCursor={true}
               freeMode={true}
               className="bestsellers-swiper"

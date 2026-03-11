@@ -107,7 +107,7 @@ export default function StoreCard({
           gap: 8px;
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
           .store-card, .store-image, .store-info {
             width: 100%;
           }
@@ -202,7 +202,7 @@ export default function StoreCard({
           line-height: 150%;
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
           .store-card {
             width: 100%;
           }
@@ -215,9 +215,14 @@ export default function StoreCard({
 
           .store-info {
             width: 100%;
+            padding: 0 4px 4px 4px;
           }
 
           .store-title {
+            font-size: 14px;
+          }
+
+          .store-location {
             font-size: 14px;
           }
 
