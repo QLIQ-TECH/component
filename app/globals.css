@@ -330,13 +330,23 @@ button {
   justify-content: flex-start;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 1201px) {
   .bestseller-slide {
     width: auto !important;
     display: flex;
     justify-content: flex-start;
     padding-left: 0;
     padding-right: 0;
+  }
+}
+
+@media (max-width: 1200px) and (min-width: 769px) {
+  .bestseller-slide {
+    display: flex;
+    justify-content: flex-start;
+    padding-left: 0;
+    padding-right: 0;
+    /* allowing swiper to control width here */
   }
 }
 
@@ -385,13 +395,30 @@ button {
   padding-right: 24px;
 }
 
-@media (max-width: 1200px) {
+/* Desktop and tablets maintain 4 columns for stores page */
+@media (max-width: 1200px) and (min-width: 768px) {
   .stores-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
   }
 }
 
-@media (max-width: 768px) {
+/* iPad tablet styling for store page. Keep desktop layout (4 cols) but just scale down */
+@media (max-width: 1024px) and (min-width: 768px) {
+  .stores-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  
+  .stores-grid .store-card,
+  .stores-grid > div {
+    /* Optional: adjustments to allow components to scale down smoothly */
+    font-size: 0.85rem;
+    padding: 8px;
+  }
+}
+
+@media (max-width: 767px) {
   .stores-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;

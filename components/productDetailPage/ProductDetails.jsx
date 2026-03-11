@@ -1133,7 +1133,68 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           color: #0082FF;
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 1200px) and (min-width: 768px) {
+          .product-details {
+            max-width: 800px;
+            padding: 40px 32px;
+            margin: 0 auto;
+          }
+
+          .product-main {
+            grid-template-columns: 1fr;
+            gap: 32px;
+          }
+
+          .main-image-container {
+            width: 100%;
+            max-width: 600px;
+            height: auto;
+            aspect-ratio: 600 / 687;
+            margin: 0 auto;
+          }
+
+          .thumbnail-list {
+            margin-top: 16px;
+            justify-content: center;
+          }
+
+          .product-info {
+            padding-left: 0px;
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+          }
+
+          .product-name {
+            font-size: 28px;
+          }
+
+          .add-to-cart,
+          .add-to-favourite {
+            max-width: 100%;
+          }
+
+          .action-buttons {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            gap: 16px;
+          }
+
+          .seller-brand-row {
+            flex-direction: column;
+            gap: 10px;
+            align-items: flex-start;
+          }
+
+          .quantity-share-container {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+          }
+        }
+
+        @media (max-width: 767px) {
          .product-details {
          max-width: 382px;
          padding: 16px 4px;
