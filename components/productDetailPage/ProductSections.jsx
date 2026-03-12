@@ -23,13 +23,10 @@ export default function ProductSections({ relatedProducts, productData }) {
   const relatedProductsSwiperRef = useRef(null)
   const customerAlsoLikedSwiperRef = useRef(null)
 
-<<<<<<< HEAD
   // Swiper navigation states
   const [relatedProductsNav, setRelatedProductsNav] = useState({ isBeginning: true, isEnd: false })
   const [customerAlsoLikedNav, setCustomerAlsoLikedNav] = useState({ isBeginning: true, isEnd: false })
 
-=======
->>>>>>> 289ba97744fcba9d91b296d4d9c07c875f6f5849
   // Redux for reviews
   const dispatch = useDispatch()
   const { reviews, loading: reviewsLoading } = useSelector(state => state.review)
@@ -570,16 +567,12 @@ export default function ProductSections({ relatedProducts, productData }) {
                     <div
                       className="customer-photo"
                       key={i}
-<<<<<<< HEAD
                       style={{
                         backgroundImage: `url(${imageUrl})`,
                         backgroundSize: 'cover',
                         backgroundPosition: 'center',
                         cursor: 'pointer',
                       }}
-=======
-                      style={{ backgroundImage: `url(${imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', cursor: 'pointer' }}
->>>>>>> 289ba97744fcba9d91b296d4d9c07c875f6f5849
                       onClick={() => openGallery(i)}
                     ></div>
                   ))
