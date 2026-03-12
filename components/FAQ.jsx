@@ -234,13 +234,7 @@ export default function FAQ() {
           }
 
           .faq-image {
-            width: 100%;
-            max-width: 520px;
-          }
-
-          .faq-image img {
-            width: 100%;
-            height: auto;
+            display: none;
           }
         }
 
@@ -260,10 +254,6 @@ export default function FAQ() {
 
           .answer-text {
             font-size: 14px;
-          }
-
-          .faq-image {
-            display: none;
           }
         }
       `}</style>

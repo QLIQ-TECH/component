@@ -80,8 +80,20 @@ export default function ImageSlider() {
             ref={swiperRef}
             modules={[Navigation]}
             spaceBetween={isMobile ? 16 : 24}
-            slidesPerView={isMobile ? 1.2 : 2}
-            centeredSlides={isMobile}
+            breakpoints={{
+              320: {
+                slidesPerView: 1.2,
+                centeredSlides: true
+              },
+              768: {
+                slidesPerView: 1.5,
+                centeredSlides: false
+              },
+              1025: {
+                slidesPerView: 2,
+                centeredSlides: false
+              }
+            }}
             loop={false}
             onSlideChange={handleSlideChange}
             onSwiper={(swiper) => {
@@ -105,7 +117,7 @@ export default function ImageSlider() {
                       borderRadius: isMobile ? '12px' : '16px',
                       width: '100%',
                       height: '100%',
-                      objectFit: 'cover'
+                      objectFit: 'contain'
                     }}
                     className="slider-image"
                   />

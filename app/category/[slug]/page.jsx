@@ -67,7 +67,7 @@ const transformCategoryData = (apiCategory) => {
 
   // Use icon from database if available, otherwise use placeholder
   let categoryImage = apiCategory.icon;
-  
+
   // If no icon from database, use hash-based placeholder assignment
   if (!categoryImage) {
     const hash = apiCategory.name.split('').reduce((a, b) => {
@@ -99,12 +99,12 @@ export default function CategoryPage() {
 
   const { categoryChildren, hypermarketLevel2Categories, supermarketLevel2Categories, storeLevel2Categories, loading, error } = useSelector(state => state.categories)
   const loadingMoreCategories = useRef(false)
-  const { 
-    storeSlugProducts, 
-    storeSlugProductsLoading, 
-    storeSlugProductsError, 
-    hypermarketProducts, 
-    hypermarketProductsLoading, 
+  const {
+    storeSlugProducts,
+    storeSlugProductsLoading,
+    storeSlugProductsError,
+    hypermarketProducts,
+    hypermarketProductsLoading,
     hypermarketProductsError,
     supermarketProducts,
     supermarketProductsLoading,
@@ -113,12 +113,12 @@ export default function CategoryPage() {
     storeProductsByStoreIdLoading,
     storeProductsByStoreIdError
   } = useSelector(state => state.products)
-  
+
   const [categoryInfo, setCategoryInfo] = useState(null)
   const [isMobile, setIsMobile] = useState(false)
   const [isStoreSlug, setIsStoreSlug] = useState(false)
   const [storeId, setStoreId] = useState(null)
-  
+
   // Navigation State
   const [bestsellersNav, setBestsellersNav] = useState({ isBeginning: true, isEnd: false });
   const [offersNav, setOffersNav] = useState({ isBeginning: true, isEnd: false });
@@ -131,7 +131,7 @@ export default function CategoryPage() {
   const isHypermarketStore = !!hypermarketProducts?.store
   const isSupermarketStore = !!supermarketProducts?.store
   const isRegularStore = !!storeProductsByStoreId?.store
-  
+
   // Determine loading state - loading if any of category, store, hypermarket, supermarket, or regular store is loading
   const isLoading = loading || storeSlugProductsLoading || hypermarketProductsLoading || supermarketProductsLoading || storeProductsByStoreIdLoading
   // Determine error state - show error if category failed and it's not a store, or if any store type failed and it is a store
@@ -171,7 +171,7 @@ export default function CategoryPage() {
       dispatch(clearHypermarketProducts())
       dispatch(clearSupermarketProducts())
       dispatch(clearStoreProductsByStoreId())
-      
+
       // Check source query parameter to determine which API to call
       if (source === 'hypermarket') {
         // From hypermarket page - first get store by slug, then call hypermarket products API
@@ -315,7 +315,7 @@ export default function CategoryPage() {
         return sectionProducts.map(transformProductData)
       }
     }
-    
+
     // Then check if we have supermarket products
     if (supermarketProducts?.store && supermarketProducts?.productsByCategory) {
       const sectionProducts = supermarketProducts.productsByCategory[sectionName] || []
@@ -323,7 +323,7 @@ export default function CategoryPage() {
         return sectionProducts.map(transformProductData)
       }
     }
-    
+
     // Then check if we have store products
     if (storeProductsByStoreId?.store && storeProductsByStoreId?.productsByCategory) {
       const sectionProducts = storeProductsByStoreId.productsByCategory[sectionName] || []
@@ -331,7 +331,7 @@ export default function CategoryPage() {
         return sectionProducts.map(transformProductData)
       }
     }
-    
+
     // Then check if we have store slug products (storeSlugProducts is already the data object)
     if (storeSlugProducts?.store && storeSlugProducts?.productsByCategory) {
       // Use products from store slug
@@ -340,7 +340,7 @@ export default function CategoryPage() {
         return sectionProducts.map(transformProductData)
       }
     }
-    
+
     // Fall back to category children if no store products
     if (categoryChildren?.data?.products) {
       const sectionProducts = categoryChildren.data.products[sectionName] || []
@@ -348,7 +348,7 @@ export default function CategoryPage() {
         return sectionProducts.map(transformProductData)
       }
     }
-    
+
     return []
   }
 
@@ -362,20 +362,20 @@ export default function CategoryPage() {
   const allStoreProducts = (hypermarketProducts?.products && hypermarketProducts.products.length > 0)
     ? hypermarketProducts.products.map(transformProductData)
     : (supermarketProducts?.products && supermarketProducts.products.length > 0)
-    ? supermarketProducts.products.map(transformProductData)
-    : (storeProductsByStoreId?.products && storeProductsByStoreId.products.length > 0)
-    ? storeProductsByStoreId.products.map(transformProductData)
-    : (storeSlugProducts?.success && storeSlugProducts?.data?.products)
-    ? storeSlugProducts.data.products.map(transformProductData)
-    : []
+      ? supermarketProducts.products.map(transformProductData)
+      : (storeProductsByStoreId?.products && storeProductsByStoreId.products.length > 0)
+        ? storeProductsByStoreId.products.map(transformProductData)
+        : (storeSlugProducts?.success && storeSlugProducts?.data?.products)
+          ? storeSlugProducts.data.products.map(transformProductData)
+          : []
 
   // Get store banner image - prioritize hypermarket, then supermarket, then store products, then store slug
-  const storeBannerImage = hypermarketProducts?.store?.banner 
-    || supermarketProducts?.store?.banner 
-    || storeProductsByStoreId?.store?.banner 
-    || storeSlugProducts?.store?.banner 
+  const storeBannerImage = hypermarketProducts?.store?.banner
+    || supermarketProducts?.store?.banner
+    || storeProductsByStoreId?.store?.banner
+    || storeSlugProducts?.store?.banner
     || '/2.jpg'
-  
+
   // Use appropriate categories based on source
   // Return empty array while loading to prevent showing stale data
   const categoriesToDisplay = (() => {
@@ -383,7 +383,7 @@ export default function CategoryPage() {
     if (isLoading) {
       return []
     }
-    
+
     if (source === 'hypermarket' && hypermarketLevel2Categories && hypermarketLevel2Categories.length > 0) {
       return hypermarketLevel2Categories.map(transformCategoryData)
     } else if (source === 'supermarket' && supermarketLevel2Categories && supermarketLevel2Categories.length > 0) {
@@ -403,7 +403,7 @@ export default function CategoryPage() {
       return []
     }
   })()
-  
+
   const transformedCategories = categoriesToDisplay
 
   const handleBack = () => {
@@ -502,7 +502,7 @@ export default function CategoryPage() {
       <section className="section">
         <div className="banner-container">
           <div className="banner-section">
-            <div 
+            <div
               className="banner-content"
               style={{
                 backgroundImage: `linear-gradient(180deg, rgba(0, 0, 0, 0.00) 0%, rgba(0, 0, 0, 0.60) 100%), url('${storeBannerImage}')`,
@@ -539,13 +539,13 @@ export default function CategoryPage() {
             prevDisabled={otherCategoriesNav.isBeginning}
             nextDisabled={otherCategoriesNav.isEnd}
           />
-           {isLoading ? (
-             <div style={{ display: 'flex', gap: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
-               {[...Array(6)].map((_, index) => (
-                 <CategoryCardSkeleton key={`skeleton-${index}`} />
-               ))}
-             </div>
-           ) : hasError ? (
+          {isLoading ? (
+            <div style={{ display: 'flex', gap: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
+              {[...Array(6)].map((_, index) => (
+                <CategoryCardSkeleton key={`skeleton-${index}`} />
+              ))}
+            </div>
+          ) : hasError ? (
             <div style={{ textAlign: 'center', padding: '20px', color: 'red' }}>
               Error loading {isActuallyStoreSlug ? 'store' : 'categories'}: {hasError}
             </div>
@@ -553,8 +553,14 @@ export default function CategoryPage() {
             <Swiper
               ref={otherCategoriesSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 2.08 : 'auto'}
-              spaceBetween={isMobile ? 12 : 24}
+              slidesPerView={'auto'}
+              spaceBetween={24}
+              breakpoints={{
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
+              }}
               grabCursor={true}
               freeMode={true}
               onSlideChange={(swiper) => {
@@ -626,6 +632,12 @@ export default function CategoryPage() {
               modules={[SwiperNavigation]}
               slidesPerView="auto"
               spaceBetween={24}
+              breakpoints={{
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
+              }}
               grabCursor={true}
               freeMode={true}
               style={{ width: '1360px' }}
@@ -726,6 +738,12 @@ export default function CategoryPage() {
               modules={[SwiperNavigation]}
               slidesPerView="auto"
               spaceBetween={24}
+              breakpoints={{
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
+              }}
               grabCursor={true}
               freeMode={true}
               style={{ width: '1360px' }}
@@ -783,6 +801,12 @@ export default function CategoryPage() {
               modules={[SwiperNavigation]}
               slidesPerView="auto"
               spaceBetween={24}
+              breakpoints={{
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
+              }}
               grabCursor={true}
               freeMode={true}
               style={{ width: '1360px' }}

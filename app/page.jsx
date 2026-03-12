@@ -602,8 +602,9 @@ export default function Home() {
                 spaceBetween={24}
                 breakpoints={{
                   320: { slidesPerView: 1.15, spaceBetween: 12 },
-                  640: { slidesPerView: 2.2, spaceBetween: 16 },
-                  1024: { slidesPerView: 'auto', spaceBetween: 24 },
+                  640: { slidesPerView: 2.6, spaceBetween: 10 },
+                  820: { slidesPerView: 2.8, spaceBetween: 16 },
+                  1024: { slidesPerView: '3.6', spaceBetween: 24 },
                 }}
                 grabCursor={true}
                 freeMode={true}
@@ -1067,8 +1068,9 @@ export default function Home() {
               spaceBetween={24}
               breakpoints={{
                 320: { slidesPerView: 1.15, spaceBetween: 12 },
-                640: { slidesPerView: 2.2, spaceBetween: 16 },
-                1024: { slidesPerView: 'auto', spaceBetween: 24 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
               }}
               grabCursor={true}
               freeMode={true}
