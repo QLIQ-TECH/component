@@ -374,101 +374,92 @@ export default function Footer() {
         }
 
         /* Responsive Design */
-        @media (max-width: 1200px) and (min-width: 700px) {
-          .footer {
-            padding: 40px 24px 100px 24px;
-            width: 100%;
-            box-sizing: border-box;
-            align-items: stretch;
-          }
-
-          .footer-content {
-            width: 100%;
-            max-width: 100%;
-            box-sizing: border-box;
-          }
-
+        @media (max-width: 1024px) and (min-width: 768px) {
           .footer-top {
-            justify-content: space-between;
+            flex-direction: row;
             gap: 20px;
           }
 
           .footer-branding {
-            max-width: 45%;
-          }
-          
-          .newsletter-section {
+            flex: 1;
             max-width: 50%;
           }
 
-          .input-group {
-            flex-wrap: wrap;
-          }
-
-          .newsletter-input {
-            flex: 1 1 calc(50% - 6px);
-            min-width: 140px;
-          }
-
-          .join-button {
-            flex: 1 1 100%;
+          .newsletter-section {
+            flex: 1;
+            max-width: 50%;
           }
 
           .footer-navigation {
-            gap: 16px;
-            flex-wrap: wrap;
-            justify-content: center;
+            display: none;
           }
-          
-          .nav-link {
-            font-size: 13px;
+
+          .mobile-nav-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            width: 100%;
+            padding: 20px 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            margin-bottom: 16px;
           }
-          
-          .footer-description {
-            font-size: 13px;
+
+          .nav-column {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-start;
+          }
+
+          .nav-column .nav-link {
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: normal;
           }
 
           .white-line-divider {
-            display: block !important;
-            width: 100% !important;
-            height: 2px !important;
-            background: #fff !important;
-            margin: 20px 0 !important;
-            visibility: visible !important;
-            opacity: 1 !important;
+            display: none;
+          }
+          
+          .input-group {
+            flex-direction: column;
+            gap: 12px;
+            align-items: stretch;
           }
 
           .footer-bottom {
-            display: flex !important;
-            justify-content: space-between !important;
-            align-items: center !important;
-            width: 100% !important;
-            flex-direction: row !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            position: relative !important;
-            z-index: 50 !important;
-            margin-top: 10px !important;
-          }
-
-          .copyright {
-            display: block !important;
-            visibility: visible !important;
-            color: #fff !important;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+            margin-top: 40px;
+            width: 100%;
+            padding-bottom: 20px;
           }
 
           .social-media {
-            display: flex !important;
-            gap: 16px !important;
-            align-items: center !important;
-            visibility: visible !important;
-            flex-direction: row !important;
-            position: relative !important;
-            z-index: 50 !important;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
           }
         }
 
-        @media (max-width: 699px) {
+        @media (max-width: 767px) {
+          .footer-top {
+            flex-direction: column;
+            gap: 30px;
+          }
+
+          .footer-branding,
+          .newsletter-section {
+            max-width: none;
+          }
+
+          .footer {
+            padding: 40px 24px 30px;
           }
 
           .footer-content {
