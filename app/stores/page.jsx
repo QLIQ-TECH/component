@@ -259,24 +259,28 @@ export default function Home() {
             <Swiper
               ref={fastestDeliverySwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={1.2}
-              spaceBetween={16}
+              slidesPerView={'auto'}
+              spaceBetween={24}
               breakpoints={{
-                768: {
-                  slidesPerView: 4,
-                  spaceBetween: 16,
-                },
-                1024: {
-                  slidesPerView: 4,
-                  spaceBetween: 16,
-                },
-                1200: {
-                  slidesPerView: 'auto',
-                  spaceBetween: 24,
-                }
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
               }}
               grabCursor={true}
               freeMode={true}
+              onSlideChange={(swiper) => {
+                setFastestDeliveryNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd })
+              }}
+              onReachEnd={(swiper) => {
+                setFastestDeliveryNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd })
+              }}
+              onReachBeginning={(swiper) => {
+                setFastestDeliveryNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd })
+              }}
+              onSwiper={(swiper) => {
+                setFastestDeliveryNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd })
+              }}
               className="bestsellers-swiper"
             >
               {fastestDeliveryStores.map((store, index) => (
@@ -326,25 +330,16 @@ export default function Home() {
             <Swiper
               ref={bestCheapDealsSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={1.2}
-              spaceBetween={16}
+              slidesPerView={'auto'}
+              spaceBetween={24}
               breakpoints={{
-                768: {
-                  slidesPerView: 3,
-                  spaceBetween: 16,
-                },
-                1024: {
-                  slidesPerView: 3,
-                  spaceBetween: 16,
-                },
-                1200: {
-                  slidesPerView: 'auto',
-                  spaceBetween: 24,
-                }
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
               }}
               grabCursor={true}
               freeMode={true}
-              className="bestsellers-swiper"
               onSlideChange={(swiper) => {
                 setBestCheapDealsNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd })
               }}
@@ -357,6 +352,7 @@ export default function Home() {
               onSwiper={(swiper) => {
                 setBestCheapDealsNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd })
               }}
+              className="bestsellers-swiper"
             >
               {bestCheapDeals.map((store, index) => {
                 // Map store category - check if level1 is stores

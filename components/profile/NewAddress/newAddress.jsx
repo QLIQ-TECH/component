@@ -151,8 +151,12 @@ export default function NewAddress({ onCancel, onSave }) {
   // Use API cities (convert array of strings to array of objects for compatibility)
   const cities = (apiCities || []).map(cityName => ({ name: cityName }))
   
-  // Use API zones (convert to array of objects with name property)
-  const zones = (apiZones || []).map(zone => ({ name: zone.zoneName, id: zone.id }))
+  // Use API zones (include charge so we can save it in payload)
+  const zones = (apiZones || []).map(zone => ({
+    name: zone.zoneName,
+    id: zone.id,
+    charge: zone.charge
+  }))
 
   // Keep refs updated with latest cities and zones for use in autocomplete handler
   useEffect(() => {
@@ -564,6 +568,8 @@ export default function NewAddress({ onCancel, onSave }) {
       // Prepare address data matching checkout format
       // IMPORTANT: Use selectedCity and selectedState directly to avoid any swap issues
       // Explicitly build addressData to ensure city and state are NOT swapped
+      const selectedZone = zones.find(zone => zone.name === selectedState)
+
       const addressData = {
         type: addressType,
         fullName: formData.fullName || '',
@@ -574,6 +580,8 @@ export default function NewAddress({ onCancel, onSave }) {
         // IMPORTANT: API expects swapped values - selectedState goes to city field, selectedCity goes to state field
         city: selectedState, // API city field gets the zone/state dropdown value
         state: selectedCity, // API state field gets the city dropdown value
+        zoneId: selectedZone?.id || null,
+        zoneName: selectedState || null,
         country: selectedCountry,
         postalCode: formData.postalCode || '',
         landmark: formData.landmark || '',

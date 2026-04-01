@@ -232,6 +232,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           {/* First row: Brand name and bought count */}
           <div className="first-row">
             <div className="brand-name">{product.brand}</div>
+            <span className="vat-note">Inclusive of Tax</span>
             {/* <span className="bought-count">{product.boughtCount}</span> */}
           </div>
 
@@ -720,9 +721,9 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
         }
 
         .vat-note {
-          font-size: 12px;
-          font-weight: 500;
-          color: #666;
+          font-size: 14px;
+          font-weight: 600;
+          color: #0082FF;
         }
 
         .description {

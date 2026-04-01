@@ -36,9 +36,12 @@ export default function DiscoveryPage() {
 
   const newStoresSwiperRef = useRef(null)
   const topStoresSwiperRef = useRef(null)
+  const [newStoresSwiper, setNewStoresSwiper] = useState(null)
+  const [topStoresSwiper, setTopStoresSwiper] = useState(null)
 
   // Swiper navigation states
   const [newStoresNav, setNewStoresNav] = useState({ isBeginning: true, isEnd: false })
+  const [topStoresNav, setTopStoresNav] = useState({ isBeginning: true, isEnd: false })
 
   // Fetch discovery page data
   useEffect(() => {
@@ -74,32 +77,41 @@ export default function DiscoveryPage() {
   const transformedNewStores = newStores.map(transformStoreData)
   const transformedTopStores = topStores.map(transformStoreData)
 
+  const updateNavState = (swiper, setNavState) => {
+    if (!swiper) return
+    setNavState({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd })
+  }
+
   const handleStoreClick = (store) => {
     const slug = store.slug || store.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
     router.push(`/${slug}?storeId=${store.id}`)
   }
 
   const handleNewStoresPrev = () => {
-    if (newStoresSwiperRef.current && newStoresSwiperRef.current.swiper && !newStoresNav.isBeginning) {
-      newStoresSwiperRef.current.swiper.slidePrev()
+    const swiper = newStoresSwiper || newStoresSwiperRef.current?.swiper
+    if (swiper && !swiper.isBeginning) {
+      swiper.slidePrev()
     }
   }
 
   const handleNewStoresNext = () => {
-    if (newStoresSwiperRef.current && newStoresSwiperRef.current.swiper && !newStoresNav.isEnd) {
-      newStoresSwiperRef.current.swiper.slideNext()
+    const swiper = newStoresSwiper || newStoresSwiperRef.current?.swiper
+    if (swiper && !swiper.isEnd) {
+      swiper.slideNext()
     }
   }
 
   const handleTopStoresPrev = () => {
-    if (topStoresSwiperRef.current && topStoresSwiperRef.current.swiper) {
-      topStoresSwiperRef.current.swiper.slidePrev()
+    const swiper = topStoresSwiper || topStoresSwiperRef.current?.swiper
+    if (swiper && !swiper.isBeginning) {
+      swiper.slidePrev()
     }
   }
 
   const handleTopStoresNext = () => {
-    if (topStoresSwiperRef.current && topStoresSwiperRef.current.swiper) {
-      topStoresSwiperRef.current.swiper.slideNext()
+    const swiper = topStoresSwiper || topStoresSwiperRef.current?.swiper
+    if (swiper && !swiper.isEnd) {
+      swiper.slideNext()
     }
   }
 
@@ -156,10 +168,14 @@ export default function DiscoveryPage() {
                   grabCursor={true}
                   freeMode={true}
                   onSlideChange={(swiper) => {
-                    setNewStoresNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                    updateNavState(swiper, setNewStoresNav)
+                  }}
+                  onResize={(swiper) => {
+                    updateNavState(swiper, setNewStoresNav)
                   }}
                   onSwiper={(swiper) => {
-                    setNewStoresNav({ isBeginning: swiper.isBeginning, isEnd: swiper.isEnd });
+                    setNewStoresSwiper(swiper)
+                    updateNavState(swiper, setNewStoresNav)
                   }}
                   style={{ width: '1360px' }}
                 >
@@ -184,6 +200,8 @@ export default function DiscoveryPage() {
                 onButtonClick={handleSeeAllTopStores}
                 onPrev={handleTopStoresPrev}
                 onNext={handleTopStoresNext}
+                prevDisabled={topStoresNav.isBeginning || transformedTopStores.length === 0}
+                nextDisabled={topStoresNav.isEnd || transformedTopStores.length === 0}
               />
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '20px' }}>
@@ -201,6 +219,16 @@ export default function DiscoveryPage() {
                   spaceBetween={24}
                   grabCursor={true}
                   freeMode={true}
+                  onSlideChange={(swiper) => {
+                    updateNavState(swiper, setTopStoresNav)
+                  }}
+                  onResize={(swiper) => {
+                    updateNavState(swiper, setTopStoresNav)
+                  }}
+                  onSwiper={(swiper) => {
+                    setTopStoresSwiper(swiper)
+                    updateNavState(swiper, setTopStoresNav)
+                  }}
                   style={{ width: '1360px' }}
                 >
                   {transformedTopStores.map((store, index) => (

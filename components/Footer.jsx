@@ -377,7 +377,6 @@ export default function Footer() {
         @media (max-width: 1024px) and (min-width: 768px) {
           .footer-top {
             flex-direction: row;
-            gap: 20px;
           }
 
           .footer-branding {
@@ -430,11 +429,11 @@ export default function Footer() {
 
           .footer-bottom {
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             gap: 20px;
             align-items: center;
-            justify-content: center;
-            margin-top: 40px;
+            justify-content: space-between;
+            margin-top: 0px;
             width: 100%;
             padding-bottom: 20px;
           }
@@ -447,9 +446,9 @@ export default function Footer() {
           }
         }
 
-        @media (max-width: 767px) {
+        @media (max-width: 768px) {
           .footer-top {
-            flex-direction: column;
+            flex-direction: row;
             gap: 30px;
           }
 
@@ -509,9 +508,11 @@ export default function Footer() {
           }
 
           .footer-bottom {
-            flex-direction: column;
+            flex-direction: row;
             gap: 20px;
+            margin-bottom: 30px;
             align-items: center;
+            justify-content: space-between;
           }
 
           .social-media {
