@@ -90,8 +90,10 @@ const transformProductData = (apiProduct) => {
 export default function Home() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [isTabletView, setIsTabletView] = useState(false)
   const fastestDeliverySwiperRef = useRef(null)
   const bestCheapDealsSwiperRef = useRef(null)
+  const storesGridRef = useRef(null)
   const dispatch = useDispatch()
   const { generalStores, fastestDeliveryStores, bestCheapDeals, loading, loadingBestCheapDeals, error } = useSelector(state => state.stores)
   const { categoryProducts = [], categoryProductsLoading } = useSelector(state => state.products)
@@ -101,11 +103,13 @@ export default function Home() {
   // Navigation State
   const [fastestDeliveryNav, setFastestDeliveryNav] = useState({ isBeginning: true, isEnd: false })
   const [bestCheapDealsNav, setBestCheapDealsNav] = useState({ isBeginning: true, isEnd: false })
+  const [storesNav, setStoresNav] = useState({ isBeginning: true, isEnd: false })
 
   // Check screen size for mobile detection
   useEffect(() => {
     const checkScreenSize = () => {
       setIsMobile(window.innerWidth < 768)
+      setIsTabletView(window.innerWidth >= 768 && window.innerWidth <= 1024)
     }
 
     // Initial check
@@ -198,6 +202,37 @@ export default function Home() {
       bestCheapDealsSwiperRef.current.swiper.slideNext()
     }
   }
+
+  const handleStoresPrev = () => {
+    if (storesGridRef.current) {
+      const scrollAmount = storesGridRef.current.clientWidth;
+      storesGridRef.current.scrollBy({ left: -scrollAmount, behavior: 'smooth' })
+    }
+  }
+
+  const handleStoresNext = () => {
+    if (storesGridRef.current) {
+      const scrollAmount = storesGridRef.current.clientWidth;
+      storesGridRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' })
+    }
+  }
+
+  const handleStoresScroll = () => {
+    if (storesGridRef.current) {
+      const { scrollLeft, scrollWidth, clientWidth } = storesGridRef.current;
+      setStoresNav({
+        isBeginning: scrollLeft <= 0,
+        isEnd: Math.ceil(scrollLeft + clientWidth) >= scrollWidth
+      });
+    }
+  }
+
+  // Effect to re-check store scroll position when data changes
+  useEffect(() => {
+    if (isTabletView) {
+      handleStoresScroll();
+    }
+  }, [generalStores, isTabletView]);
   return (
     <main className="home-page">
       <Navigation />
@@ -295,11 +330,11 @@ export default function Home() {
               spaceBetween={16}
               breakpoints={{
                 768: {
-                  slidesPerView: 4,
+                  slidesPerView: 3,
                   spaceBetween: 16,
                 },
                 1024: {
-                  slidesPerView: 4,
+                  slidesPerView: 3,
                   spaceBetween: 16,
                 },
                 1200: {
@@ -370,14 +405,18 @@ export default function Home() {
         <div className="container">
           <SectionHeader
             title="Stores"
-            showNavigation={false}
+            showNavigation={isTabletView}
+            onPrev={handleStoresPrev}
+            onNext={handleStoresNext}
+            prevDisabled={storesNav.isBeginning}
+            nextDisabled={storesNav.isEnd}
             showButton={false}
             buttonText="See All"
           />
           {error && (
             <div style={{ margin: '16px 0', color: 'red' }}>{error}</div>
           )}
-          <div className="stores-grid">
+          <div className="stores-grid" ref={storesGridRef} onScroll={handleStoresScroll}>
             {(loading && (!generalStores || generalStores.length === 0)) ? (
               productData.map((product, index) => (
                 <StoreCard key={`skeleton-${index}`} {...product} />

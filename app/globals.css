@@ -403,18 +403,41 @@ button {
   }
 }
 
-/* iPad tablet styling for store page. Keep desktop layout (4 cols) but just scale down */
+/* iPad tablet styling for store page. Display as slider (3 items) just like best & cheap deals */
 @media (max-width: 1024px) and (min-width: 768px) {
   .stores-grid {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 16px;
+    justify-content: flex-start;
+    padding-bottom: 8px;
+    padding-left: 0;
+    padding-right: 0;
+    margin: 0 auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
   }
   
+  .stores-grid::-webkit-scrollbar {
+    display: none;
+  }
+  
+  @supports (-ms-overflow-style: none) {
+    .stores-grid {
+      -ms-overflow-style: none; /* IE and Edge */
+      scrollbar-width: none; /* Firefox */
+    }
+  }
+
   .stores-grid .store-card,
   .stores-grid > div {
-    /* Optional: adjustments to allow components to scale down smoothly */
-    font-size: 0.85rem;
-    padding: 8px;
+    flex: 0 0 calc((100% - 32px) / 3);
+    max-width: calc((100% - 32px) / 3);
+    scroll-snap-align: start;
+    font-size: 1rem;
+    padding: 0;
   }
 }
 
