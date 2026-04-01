@@ -374,9 +374,81 @@ export default function Footer() {
         }
 
         /* Responsive Design */
-        @media (max-width: 1024px) {
+        @media (max-width: 1024px) and (min-width: 768px) {
           .footer-top {
+            flex-direction: row;
+          }
+
+          .footer-branding {
+            flex: 1;
+            max-width: 50%;
+          }
+
+          .newsletter-section {
+            flex: 1;
+            max-width: 50%;
+          }
+
+          .footer-navigation {
+            display: none;
+          }
+
+          .mobile-nav-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            width: 100%;
+            padding: 20px 0;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            margin-bottom: 16px;
+          }
+
+          .nav-column {
+            display: flex;
             flex-direction: column;
+            gap: 8px;
+            align-items: flex-start;
+          }
+
+          .nav-column .nav-link {
+            font-size: 11px;
+            line-height: 1.4;
+            white-space: normal;
+          }
+
+          .white-line-divider {
+            display: none;
+          }
+          
+          .input-group {
+            flex-direction: column;
+            gap: 12px;
+            align-items: stretch;
+          }
+
+          .footer-bottom {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 0px;
+            width: 100%;
+            padding-bottom: 20px;
+          }
+
+          .social-media {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .footer-top {
+            flex-direction: row;
             gap: 30px;
           }
 
@@ -385,12 +457,6 @@ export default function Footer() {
             max-width: none;
           }
 
-          .footer-navigation {
-            gap: 32px;
-          }
-        }
-
-        @media (max-width: 768px) {
           .footer {
             padding: 40px 24px 30px;
           }
@@ -442,9 +508,11 @@ export default function Footer() {
           }
 
           .footer-bottom {
-            flex-direction: column;
+            flex-direction: row;
             gap: 20px;
+            margin-bottom: 30px;
             align-items: center;
+            justify-content: space-between;
           }
 
           .social-media {

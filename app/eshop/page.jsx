@@ -376,8 +376,14 @@ export default function Home() {
               <Swiper
                 ref={bestsellersSwiperRef}
                 modules={[SwiperNavigation]}
-                slidesPerView={isMobile ? 1.2 : 'auto'}
-                spaceBetween={isMobile ? 16 : 24}
+                slidesPerView={'auto'}
+                spaceBetween={ 24}
+                breakpoints={{
+                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  640: { slidesPerView: 2.6, spaceBetween: 10 },
+                  820: { slidesPerView: 2.8, spaceBetween: 16 },
+                  1024: { slidesPerView: '3.6', spaceBetween: 24 },
+                }}
                 grabCursor={true}
                 freeMode={true}
                 onSlideChange={(swiper) => {
@@ -427,8 +433,14 @@ export default function Home() {
               <Swiper
                 ref={categoriesSwiperRef}
                 modules={[SwiperNavigation]}
-                slidesPerView={isMobile ? 2.08 : 'auto'}
-                spaceBetween={isMobile ? 12 : 24}
+                slidesPerView={ 'auto'}
+                spaceBetween={ 24}
+                breakpoints={{
+                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  640: { slidesPerView: 3, spaceBetween: 10 },
+                  820: { slidesPerView: 3.2, spaceBetween: 16 },
+                  1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                }}
                 grabCursor={true}
                 freeMode={true}
                 onSlideChange={(swiper) => {
@@ -469,8 +481,14 @@ export default function Home() {
             <Swiper
               ref={offersSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={ 'auto'}
+              spaceBetween={ 24}
+              breakpoints={{
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
+              }}
               grabCursor={true}
               freeMode={true}
               onSlideChange={(swiper) => {
@@ -548,8 +566,14 @@ export default function Home() {
               <Swiper
                 ref={topBrandsSwiperRef}
                 modules={[SwiperNavigation]}
-                slidesPerView={isMobile ? 2.08 : 'auto'}
-                spaceBetween={isMobile ? 12 : 24}
+                slidesPerView={'auto'}
+                spaceBetween={ 24}
+                breakpoints={{
+                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  640: { slidesPerView: 3, spaceBetween: 10 },
+                  820: { slidesPerView: 3.2, spaceBetween: 16 },
+                  1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                }}
                 grabCursor={true}
                 freeMode={true}
                 onSlideChange={(swiper) => {
@@ -591,8 +615,14 @@ export default function Home() {
             <Swiper
               ref={featuredOffersSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={'auto'}
+              spaceBetween={ 24}
+              breakpoints={{
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
+              }}
               grabCursor={true}
               freeMode={true}
               onSlideChange={(swiper) => {
@@ -679,8 +709,14 @@ export default function Home() {
               <Swiper
                 ref={level3CategoriesSwiperRef}
                 modules={[SwiperNavigation]}
-                slidesPerView={isMobile ? 2.08 : 'auto'}
-                spaceBetween={isMobile ? 12 : 24}
+                slidesPerView={'auto'}
+                spaceBetween={ 24}
+                breakpoints={{
+                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  640: { slidesPerView: 3, spaceBetween: 10 },
+                  820: { slidesPerView: 3.2, spaceBetween: 16 },
+                  1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                }}
                 grabCursor={true}
                 freeMode={true}
                 onSlideChange={(swiper) => {

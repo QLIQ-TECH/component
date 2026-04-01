@@ -26,6 +26,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
   const [isAddedToCart, setIsAddedToCart] = useState(false);
   const [isAddedToWishlist, setIsAddedToWishlist] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isPhone, setIsPhone] = useState(false);
   const colorSwiperRef = useRef(null);
   const sizeSwiperRef = useRef(null);
   const promoCardsSwiperRef = useRef(null);
@@ -69,7 +70,8 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
   // Check screen size for mobile detection
   useEffect(() => {
     const checkScreenSize = () => {
-      setIsMobile(window.innerWidth < 768);
+      setIsMobile(window.innerWidth < 834);
+      setIsPhone(window.innerWidth < 480);
     };
 
     // Initial check
@@ -202,8 +204,8 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
             <Image
               src={product.images[currentImageIndex]}
               alt={product.name}
-              width={isMobile ? 350 : 600}
-              height={isMobile ? 350 : 650}
+              width={isPhone ? 350 : 600}
+              height={isPhone ? 350 : 650}
               className="main-image"
             />
 
@@ -230,6 +232,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           {/* First row: Brand name and bought count */}
           <div className="first-row">
             <div className="brand-name">{product.brand}</div>
+            <span className="vat-note">Inclusive of Tax</span>
             {/* <span className="bought-count">{product.boughtCount}</span> */}
           </div>
 
@@ -414,18 +417,10 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
                   {/* {cartQuantity > 0 && <span className="quantity-badge-mobile">{cartQuantity}</span>} */}
                 </button>
                 <button
-                  className={`add-to-favourite-mobile ${(isAddedToWishlist || isInWishlist) ? 'added' : ''}`}
+                  className={`add-to-favourite ${(isAddedToWishlist || isInWishlist) ? 'added' : ''}`}
                   onClick={handleAddToFavourite}
-                  aria-label={isInWishlist ? "Remove from wishlist" : "Add to wishlist"}
                 >
-                  <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                    <rect width="40" height="40" rx="20" fill="#0082FF" />
-                    {isInWishlist ? (
-                      <path d="M20 28L18.695 26.849C14.06 22.7771 11 20.0828 11 16.7956C11 14.1014 13.178 12 15.95 12C17.516 12 19.019 12.7063 20 13.8136C20.981 12.7063 22.484 12 24.05 12C26.822 12 29 14.1014 29 16.7956C29 20.0828 25.94 22.7771 21.305 26.849L20 28Z" fill="#001F3F" />
-                    ) : (
-                      <path d="M20.09 25.5586L20 25.6458L19.901 25.5586C15.626 21.8005 12.8 19.3155 12.8 16.7956C12.8 15.0518 14.15 13.7439 15.95 13.7439C17.336 13.7439 18.686 14.6158 19.163 15.8016H20.837C21.314 14.6158 22.664 13.7439 24.05 13.7439C25.85 13.7439 27.2 15.0518 27.2 16.7956C27.2 19.3155 24.374 21.8005 20.09 25.5586ZM24.05 12C22.484 12 20.981 12.7063 20 13.8136C19.019 12.7063 17.516 12 15.95 12C13.178 12 11 14.1014 11 16.7956C11 20.0828 14.06 22.7771 18.695 26.849L20 28L21.305 26.849C25.94 22.7771 29 20.0828 29 16.7956C29 14.1014 26.822 12 24.05 12Z" fill="white" />
-                    )}
-                  </svg>
+                  {(isAddedToWishlist || isInWishlist) ? 'Added To Wishlist' : 'Add To Wishlist'}
                 </button>
               </>
             ) : (
@@ -556,6 +551,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           margin: 0 auto;
           padding: 40px 20px;
           width: 100%;
+          box-sizing: border-box;
         }
 
         .product-main {
@@ -573,8 +569,10 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
 
         .main-image-container {
           position: relative;
-          width: 600px;
-          height: 687px;
+          width: 100%;
+          max-width: 600px;
+          height: auto;
+          aspect-ratio: 1 / 1;
           border-radius: 16px;
           overflow: hidden;
           background: white;
@@ -584,7 +582,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
         .main-image {
           width: 100%;
           height: 100%;
-          object-fit: cover;
+          object-fit: contain;
         }
 
         .nav-arrow {
@@ -723,9 +721,9 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
         }
 
         .vat-note {
-          font-size: 12px;
-          font-weight: 500;
-          color: #666;
+          font-size: 14px;
+          font-weight: 600;
+          color: #0082FF;
         }
 
         .description {
@@ -865,7 +863,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
 
         /* Mobile-specific action buttons layout */
         .action-buttons-mobile {
-          flex-direction: row;
+          flex-direction: column;
           align-items: center;
           gap: 12px;
           width: 100%;
@@ -984,7 +982,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
         }
 
         /* Ensure desktop buttons remain unchanged */
-        @media (min-width: 768px) {
+        @media (min-width: 834px) {
           .action-buttons-mobile {
             flex-direction: row;
             gap: 16px;
@@ -997,15 +995,14 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
         }
 
         /* Mobile-specific styles */
-        @media (max-width: 767px) {
-          .add-to-cart,
-          .add-to-favourite {
+        @media (max-width: 833px) {
+          .add-to-cart {
             display: none;
           }
 
           .action-buttons-mobile {
             display: flex;
-            flex-direction: row;
+            flex-direction: column;
           }
         }
 
@@ -1133,38 +1130,121 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           color: #0082FF;
         }
 
-        @media (max-width: 768px) {
-         .product-details {
-         max-width: 382px;
-         padding: 16px 4px;
-         width: 100%;
+        @media (max-width: 1200px) and (min-width: 834px) {
+          .product-details {
+            max-width: 1392px; /* same as desktop */
+            padding: 40px 32px;
+            margin: 0;
+            width: 100%;
+            box-sizing: border-box;
+          }
+
+          .product-main {
+            gap: 32px;
+          }
+
+          .main-image-container {
+            width: 100%;
+            max-width: 480px;
+            height: auto;
+            aspect-ratio: 1 / 1;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding-top: 40px;
+          }
+
+          .thumbnail-list {
+            margin-top: 16px;
+            justify-content: center;
+          }
+
+          .product-info {
+            padding-left: 0px;
+            width: 100%;
+            max-width: 100%;
+            margin: 0;
+          }
+
+          .product-name {
+            font-size: 28px;
+          }
+
+          .add-to-cart,
+          .add-to-favourite {
+            max-width: 100%;
+          }
+
+          .action-buttons {
+            display: flex;
+            flex-direction: row;
+            width: 100%;
+            gap: 16px;
+          }
+
+          .action-buttons .add-to-cart,
+          .action-buttons .add-to-favourite {
+            flex: 1;
+          }
+
+          .seller-brand-row {
+            flex-direction: column;
+            gap: 10px;
+            align-items: flex-start;
+          }
+
+          .quantity-share-container {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            width: 100%;
+          }
+          
+          .share-section {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          }
         }
+
+        @media (max-width: 833px) {
+          .product-details {
+            width: 100%;
+            padding: 16px;
+            box-sizing: border-box;
+          }
           .product-main {
             grid-template-columns: 1fr;
             gap: 24px;
           }
           .main-image-container {
-            width: 350px;
-            height: 350px;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 1 / 1;
             margin: 0 auto;
+            max-width: 500px;
           }
           .main-image-container .main-image {
             width: 100% !important;
             height: 100% !important;
             max-width: 100% !important;
             max-height: 100% !important;
-            object-fit: cover;
+            object-fit: contain;
           }
           .image-dots {
-          display: flex;
-          gap: 4px;
-        }
+            display: flex;
+            gap: 6px;
+          }
           .product-info {
-          display: flex;
-          flex-direction: column;
-          gap: 8px;
-          padding: 0 8px;
-        }
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding: 0;
+            width: 100%;
+          }
           .product-name {
             font-size: 24px;
           }
@@ -1179,11 +1259,13 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
             gap: 10px;
           }
           .action-buttons {
-            flex-direction: row;
+            flex-direction: column;
             width: 100%;
+            gap: 12px;
           }
           .add-to-cart,
-          .add-to-favourite {
+          .add-to-favourite,
+          .add-to-cart-mobile {
             width: 100%;
             max-width: 100%;
           }
@@ -1204,7 +1286,7 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           .color-swiper-wrapper,
           .size-swiper-wrapper {
             width: 100%;
-            max-width: 350px;
+            max-width: 100%;
             overflow: hidden;
           }
           .color-swiper,
@@ -1225,12 +1307,12 @@ export default function ProductDetails({ product, variants = [], selectedAttribu
           }
           .promo-cards-swiper-wrapper {
             width: 100%;
-            max-width: 350px;
+            max-width: 100%;
             overflow: hidden;
           }
           .promo-cards-swiper {
             width: 100%;
-            max-width: 350px;
+            max-width: 100%;
             padding: 0;
           }
           .promo-cards-swiper .swiper-slide {

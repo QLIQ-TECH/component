@@ -11,6 +11,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { fetchProducts } from '@/store/slices/productsSlice'
 import { fetchProductDetail, fetchProductVariant, fetchProductVariants, setSelectedAttributes, setProductId } from '@/store/slices/productDetailSlice'
 import { generateVariantUrl, findMatchingVariant, transformProductData } from '@/utils/productUtils'
+import { getAuthToken } from '@/utils/userUtils'
+import { catalog } from '@/store/api/endpoints'
 
 // Mock product data - in a real app this would come from an API
 const mockProduct = {
@@ -84,6 +86,28 @@ export default function ProductPage({ params }) {
       dispatch(fetchProductVariants(product.parent_product_id))
     }
   }, [dispatch, product, variants.length])
+
+  // Save product to recently viewed when product detail loads
+  useEffect(() => {
+    const productId = product?._id || currentProductId
+    if (!productId) return
+
+    const saveRecentlyViewed = async () => {
+      try {
+        const token = await getAuthToken()
+        await fetch(catalog.saveRecentlyViewed(productId), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        })
+      } catch {
+        // Silently ignore - recently viewed is non-critical
+      }
+    }
+    saveRecentlyViewed()
+  }, [product?._id, currentProductId])
 
   // Handle variant selection
   const handleVariantChange = (attributeType, value) => {

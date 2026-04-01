@@ -67,6 +67,30 @@ export default function RootLayout({
             `,
           }}
         />
+
+        {/* Organization Schema - sitewide */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Organization',
+              '@id': 'https://www.iqliq.ae/#organization',
+              name: 'IQLIQ',
+              url: 'https://www.iqliq.ae/',
+              logo: 'https://www.iqliq.ae/_next/image?url=%2Flogo.png&w=128&q=75',
+              description:
+                'IQLIQ is a UAE-based influencer marketing, social commerce, and entertainment ecosystem connecting influencers, brands, and audiences.',
+              sameAs: [
+                'https://www.instagram.com/iqliqlive',
+                'https://www.facebook.com/people/IQLIQ/61583990447382/',
+                'https://www.linkedin.com/company/iqliq/',
+                'https://www.youtube.com/@Iqliq2025',
+                'https://play.google.com/store/apps/details?id=com.qliq.app',
+              ],
+            }),
+          }}
+        />
       </head>
       <body>
         <ReduxProvider>

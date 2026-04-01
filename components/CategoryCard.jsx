@@ -38,6 +38,8 @@ export default function CategoryCard({ name, image, onClick }) {
           background: rgba(247, 247, 247, 0.00);
           cursor: pointer;
           transition: all 0.2s ease;
+          padding: 16px;
+          min-width: ${isMobile ? '192px' : '238px'};
         }
 
         .category-name {

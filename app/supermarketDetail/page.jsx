@@ -157,6 +157,10 @@ export default function Home() {
           gap: 24px;
           align-items: flex-start;
           min-height: calc(100vh - 200px);
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow-x: hidden;
         }
         
         .filters-sidebar {
@@ -177,12 +181,17 @@ export default function Home() {
         .content-area { 
           flex: 1;
           min-width: 0; /* allows flex item to shrink below content size */
+          width: 100%;
+          max-width: 100%;
         }
         
         .products-scroll-container {
           width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
           max-height: calc(100vh - 200px);
           overflow-y: auto;
+          overflow-x: hidden;
           padding-right: 8px; /* space for scrollbar */
            /* Hide scrollbar, keep scroll functionality */
            -ms-overflow-style: none; /* IE and Edge */
@@ -200,6 +209,9 @@ export default function Home() {
         .grid-item { 
           display: flex; 
           justify-content: center; 
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
         }
 
         .sticky-header {
@@ -249,6 +261,17 @@ export default function Home() {
         }
 
         @media (max-width: 1024px) {
+          .filters-sidebar { 
+            width: 220px; 
+          }
+          
+          .grid-3 { 
+            grid-template-columns: repeat(2, minmax(0, 1fr)); 
+            gap: 16px;
+          }
+        }
+
+        @media (max-width: 767px) {
           .listing-layout { 
             flex-direction: column; 
             gap: 16px;
@@ -261,11 +284,6 @@ export default function Home() {
             z-index: 1;
             max-height: none;
             overflow-y: visible;
-          }
-          
-          .grid-3 { 
-            grid-template-columns: repeat(2, minmax(0, 1fr)); 
-            gap: 16px;
           }
         }
         

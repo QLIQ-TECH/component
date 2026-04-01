@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import Script from 'next/script'
 
 const faqData = [
   {
@@ -22,6 +23,20 @@ const faqData = [
   }
 ]
 
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  '@id': 'https://www.iqliq.ae/#faq',
+  mainEntity: faqData.map((item) => ({
+    '@type': 'Question',
+    name: item.question.trim(),
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: item.answer,
+    },
+  })),
+}
+
 export default function FAQ() {
   const [openIndex, setOpenIndex] = useState(0)
 
@@ -31,6 +46,15 @@ export default function FAQ() {
 
   return (
     <div className="faq-section">
+      {/* FAQ Schema JSON-LD */}
+      <Script
+        id="faq-schema"
+        type="application/ld+json"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(faqSchema),
+        }}
+      />
       <div className="faq-container">
         <div className="faq-content">
           <div className="faq-text">
@@ -43,9 +67,9 @@ export default function FAQ() {
                     <button className="toggle-btn" aria-label="Toggle question">
                       <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
                         {openIndex === index ? (
-                          <path d="M24 16H16H8" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M24 16H16H8" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         ) : (
-                          <path d="M24 16H16M16 16H8M16 16V8M16 16V24" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M24 16H16M16 16H8M16 16V8M16 16V24" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         )}
                       </svg>
                     </button>
@@ -183,13 +207,34 @@ export default function FAQ() {
         }
 
         @media (max-width: 1024px) {
-          .faq-content {
-            flex-direction: column;
+          .faq-section {
+            padding: 24px;
             gap: 40px;
           }
 
-          .faq-image {
+          .faq-content {
+            flex-direction: column;
+            gap: 32px;
+          }
+
+          .faq-text {
             width: 100%;
+          }
+
+          .faq-title {
+            font-size: 32px;
+          }
+
+          .question-text {
+            font-size: 18px;
+          }
+
+          .answer-text {
+            font-size: 15px;
+          }
+
+          .faq-image {
+            display: none;
           }
         }
 
@@ -209,9 +254,6 @@ export default function FAQ() {
 
           .answer-text {
             font-size: 14px;
-          }
-            .faq-image {
-            display: none;
           }
         }
       `}</style>

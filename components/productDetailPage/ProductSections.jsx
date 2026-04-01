@@ -41,7 +41,7 @@ export default function ProductSections({ relatedProducts, productData }) {
   // Check screen size for mobile detection
   useEffect(() => {
     const checkScreenSize = () => {
-      setIsMobile(window.innerWidth < 768);
+      setIsMobile(window.innerWidth < 834);
     };
 
     // Initial check
@@ -318,6 +318,18 @@ export default function ProductSections({ relatedProducts, productData }) {
   const specifications = createSpecifications()
   const attributes = createAttributes()
 
+  const allSpecs = [...specifications];
+  const specLabels = new Set(allSpecs.map(s => s.label.toLowerCase()));
+  attributes.forEach(attr => {
+    if (!specLabels.has(attr.label.toLowerCase())) {
+      allSpecs.push(attr);
+      specLabels.add(attr.label.toLowerCase());
+    }
+  });
+
+  const leftTableData = allSpecs.slice(0, Math.ceil(allSpecs.length / 2));
+  const rightTableData = allSpecs.slice(Math.ceil(allSpecs.length / 2));
+
   // Handlers for related products swiper navigation
   const handleRelatedProductsPrev = () => {
     if (relatedProductsSwiperRef.current && relatedProductsSwiperRef.current.swiper && !relatedNav.isBeginning) {
@@ -361,8 +373,15 @@ export default function ProductSections({ relatedProducts, productData }) {
             <Swiper
               ref={relatedProductsSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={1.2}
+              spaceBetween={20}
+              breakpoints={{
+                480: { slidesPerView: 2.2, spaceBetween: 20 },
+                834: { slidesPerView: 3.2, spaceBetween: 40 },
+                1024: { slidesPerView: 3.5, spaceBetween: 40 },
+                1280: { slidesPerView: 4.5, spaceBetween: 40 },
+                1440: { slidesPerView: 'auto', spaceBetween: 40 }
+              }}
               grabCursor={true}
               freeMode={true}
               className="bestsellers-swiper"
@@ -430,7 +449,7 @@ export default function ProductSections({ relatedProducts, productData }) {
             <div className="spec-table spec-table-left">
               <table>
                 <tbody>
-                  {specifications.slice(0, Math.ceil(specifications.length / 2)).map((spec, index) => (
+                  {leftTableData.map((spec, index) => (
                     <tr key={index}>
                       <th>{spec.label}</th>
                       <td>{String(spec.value || '')}</td>
@@ -439,10 +458,10 @@ export default function ProductSections({ relatedProducts, productData }) {
                 </tbody>
               </table>
             </div>
-            <div className="spec-table spec-table-right">
+            <div className={`spec-table spec-table-right ${leftTableData.length % 2 === 0 ? "right-starts-odd" : "right-starts-even"}`}>
               <table>
                 <tbody>
-                  {attributes.slice(0, Math.ceil(attributes.length / 2)).map((attr, index) => (
+                  {rightTableData.map((attr, index) => (
                     <tr key={index}>
                       <th>{attr.label}</th>
                       <td>{String(attr.value || '')}</td>
@@ -559,7 +578,7 @@ export default function ProductSections({ relatedProducts, productData }) {
                   ))
                 ) : (
                   <div className="no-images-text">
-                    
+
                   </div>
                 )}
               </div>
@@ -622,8 +641,15 @@ export default function ProductSections({ relatedProducts, productData }) {
             <Swiper
               ref={customerAlsoLikedSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={1.2}
+              spaceBetween={20}
+              breakpoints={{
+                480: { slidesPerView: 2.2, spaceBetween: 20 },
+                834: { slidesPerView: 3.2, spaceBetween: 40 },
+                1024: { slidesPerView: 3.5, spaceBetween: 40 },
+                1280: { slidesPerView: 4.5, spaceBetween: 40 },
+                1440: { slidesPerView: 'auto', spaceBetween: 40 }
+              }}
               grabCursor={true}
               freeMode={true}
               className="bestsellers-swiper"
@@ -683,7 +709,7 @@ export default function ProductSections({ relatedProducts, productData }) {
         }
 
         .bestseller-slide {
-          width: auto;
+          width: 100%;
           height: auto;
         }
 
@@ -868,11 +894,11 @@ export default function ProductSections({ relatedProducts, productData }) {
           max-height: 600px;
           object-fit: cover;
         }
-
+ 
         .specifications-container {
           max-width: 1392px;
-          padding-left: 0px;
-          padding-right: 0px;
+          padding-left: 30px;
+          padding-right: 30px;
         }
         .specifications-wrapper {
           display: flex;
@@ -910,7 +936,7 @@ export default function ProductSections({ relatedProducts, productData }) {
         .spec-table td {
           color: #222;
         }
-        @media (max-width: 768px) {
+        @media (max-width: 833px) {
           .spec-table {
             width: 100%;
             max-width: 100%;
@@ -974,7 +1000,7 @@ export default function ProductSections({ relatedProducts, productData }) {
           }
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 833px) {
           .section-title {
             font-size: 28px;
             margin-bottom: 32px;
@@ -1122,6 +1148,7 @@ export default function ProductSections({ relatedProducts, productData }) {
           margin-bottom: 32px;
           min-width: 320px;
           max-width: 340px;
+          padding: 24px;
         }
         .overall-rating-label {
           font-size: 24px;
@@ -1378,9 +1405,10 @@ export default function ProductSections({ relatedProducts, productData }) {
           }
           .reviews-left, .reviews-right {
             max-width: 100%;
+            min-width: 0;
           }
         }
-        @media (max-width: 768px) {
+        @media (max-width: 833px) {
           .reviews-title {
             font-size: 1.3rem;
             margin-bottom: 18px;
@@ -1412,13 +1440,99 @@ export default function ProductSections({ relatedProducts, productData }) {
             width: 80px;
             height: 80px;
           }
-            .review-left {
-            max-width: 350px;
+.reviews-left {
+              max-width: 100%;
+              width: 100%;
+            }
+            .reviews-right {
+              min-width: 0;
+              max-width: 100%;
             width: 100%;
           }
-          .reviews-right {
-            min-width: 350px;
+        }
+
+        @media (max-width: 1200px) and (min-width: 834px) {
+          .specifications-wrapper {
+            flex-direction: column;
+            gap: 0;
             width: 100%;
+            padding: 0 16px;
+          }
+          .spec-table, .spec-table table {
+            width: 100%;
+            max-width: 100%;
+          }
+          .spec-table tr {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            flex-wrap: nowrap;
+          }
+          .spec-table th {
+            text-align: left;
+            align-self: flex-start;
+            flex: 0 0 auto;
+            min-width: 120px;
+            padding: 12px 8px 12px 0;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+          }
+          .spec-table td {
+            text-align: right;
+            align-self: flex-end;
+            flex: 1;
+            min-width: 0;
+            padding: 12px 0 12px 8px;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            overflow: visible;
+          }
+          .customer-photo {
+            width: 60px;
+            height: 60px;
+          }
+          .review-photo {
+            width: 48px;
+            height: 48px;
+          }
+        }
+
+        @media (max-width: 1200px) {
+          .reviews-ratings-container {
+            flex-direction: column;
+            gap: 32px;
+            padding: 0 16px;
+            width: 100%;
+            box-sizing: border-box;
+          }
+          .reviews-left, .reviews-right {
+            max-width: 100%;
+            width: 100%;
+            min-width: 0;
+          }
+          .overall-rating-box {
+            max-width: 100%;
+            width: 100%;
+            margin: 0 0 32px 0;
+            padding: 24px;
+            box-sizing: border-box;
+          }
+          .right-starts-odd tr:nth-child(odd) td,
+          .right-starts-odd tr:nth-child(odd) th {
+            background: #f7f7f7 !important;
+          }
+          .right-starts-odd tr:nth-child(even) td,
+          .right-starts-odd tr:nth-child(even) th {
+            background: #fff !important;
+          }
+          .right-starts-even tr:nth-child(odd) td,
+          .right-starts-even tr:nth-child(odd) th {
+            background: #fff !important;
+          }
+          .right-starts-even tr:nth-child(even) td,
+          .right-starts-even tr:nth-child(even) th {
+            background: #f7f7f7 !important;
           }
         }
       `}</style>
@@ -1890,7 +2004,7 @@ export default function ProductSections({ relatedProducts, productData }) {
           opacity: 1;
         }
         
-        @media (max-width: 768px) {
+        @media (max-width: 833px) {
           .viewall-content {
             padding: 20px;
             max-width: 95vw;

@@ -32,6 +32,8 @@ export const catalog = {
   productById: (id) => `${BASES.catalog}/products/${id}`,
   productBySlug: (id, slug) => `${BASES.catalog}/products/${id}/slug/${slug}`,
   productBySlugOnly: (slug) => `${BASES.catalog}/products/slug/${slug}`,
+  recentlyViewed: `${BASES.catalog}/products/recently-viewed`,
+  saveRecentlyViewed: (productId) => `${BASES.catalog}/products/${productId}/recently-viewed`,
   productsByBrand: (brandSlug) => `${BASES.catalog}/products/brand/${brandSlug}`,
   productsByStore: (storeId) => `${BASES.catalog}/products/store/${storeId}`,
   productsByStoreSlug: (storeSlug, params = {}) => {

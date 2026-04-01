@@ -618,8 +618,17 @@ export default function CheckoutPage() {
     qoynsDiscountAmount = appliedDiscount.discountAmount
   }
 
-  // Get shipping cost from selected shipping method (from Jibly API)
-  const shippingCost = selectedShippingMethod?.cost || selectedShippingMethod?.shippingMethodCost || 9; // Default to 9 if no method selected
+  // Get shipping cost from selected shipping method, fallback to selected address zone charge
+  const shippingCost =
+    selectedShippingMethod?.cost ||
+    selectedShippingMethod?.shippingMethodCost ||
+    selectedAddress?.zoneCharge ||
+    selectedAddress?.charge ||
+    9
+  const normalizedShippingCost = Number.isFinite(Number(shippingCost)) ? Number(shippingCost) : 0
+  const resolvedShippingMethod = (selectedShippingMethod?.id || selectedShippingMethod?.methodId || 'zone_delivery').toString()
+  const resolvedShippingMethodName = selectedShippingMethod?.name || selectedShippingMethod?.methodName || 'Zone Delivery'
+  const resolvedShippingMethodTime = selectedShippingMethod?.deliveryTime || selectedShippingMethod?.estimatedDelivery || selectedShippingMethod?.time || '3 - 5 Days'
 
   // Order Total = Subtotal + Delivery (before Qoyns)
   const orderTotalBeforeQoyns = subtotalAfterGigCompletion + shippingCost;
@@ -1216,8 +1225,12 @@ export default function CheckoutPage() {
   // Use API cities (convert array of strings to array of objects for compatibility)
   const cities = (apiCities || []).map(cityName => ({ name: cityName }))
   
-  // Use API zones (convert to array of objects with name property)
-  const zones = (apiZones || []).map(zone => ({ name: zone.zoneName, id: zone.id }))
+  // Use API zones (include charge to persist in address payload)
+  const zones = (apiZones || []).map(zone => ({
+    name: zone.zoneName,
+    id: zone.id,
+    charge: zone.charge
+  }))
 
   // Keep refs updated with latest cities and zones for use in autocomplete handler
   useEffect(() => {
@@ -1446,6 +1459,8 @@ export default function CheckoutPage() {
       // IMPORTANT: Use selectedCity and selectedState directly to avoid any swap issues
       // Don't rely on addressForm.city or addressForm.state as they might be swapped from Google Places
       // Explicitly build addressData to ensure city and state are NOT swapped
+      const selectedZone = zones.find(zone => zone.name === selectedState)
+
       const addressData = {
         type: addressForm.type || 'home',
         fullName: addressForm.fullName || '',
@@ -1460,6 +1475,8 @@ export default function CheckoutPage() {
         // IMPORTANT: API expects swapped values - selectedState goes to city field, selectedCity goes to state field
         city: selectedState, // API city field gets the zone/state dropdown value
         state: selectedCity, // API state field gets the city dropdown value
+        zoneId: selectedZone?.id || null,
+        zoneName: selectedState || null,
         isDefault: addressForm.isDefault || false
       }
       
@@ -1561,14 +1578,14 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod,
       total: actualTotal,
       subtotal: subtotal,
-      shipping: shippingCost,
+      shipping: normalizedShippingCost,
       discount: qoynsDiscountAmount + couponDiscountAmount + gigCompletionDiscountAmount + cashWalletDiscountAmount,
       couponCode: appliedCoupon ? appliedCoupon.discountCode : (appliedGigCompletion ? appliedGigCompletion.discountCode : null),
       // Shipping method information (from Jibly API)
-      shippingMethod: selectedShippingMethod?.id || selectedShippingMethod?.methodId,
-      shippingMethodName: selectedShippingMethod?.name || selectedShippingMethod?.methodName,
-      shippingMethodTime: selectedShippingMethod?.deliveryTime || selectedShippingMethod?.estimatedDelivery || selectedShippingMethod?.time,
-      shippingMethodCost: shippingCost
+      shippingMethod: resolvedShippingMethod,
+      shippingMethodName: resolvedShippingMethodName,
+      shippingMethodTime: resolvedShippingMethodTime,
+      shippingMethodCost: normalizedShippingCost
     }
 
     dispatch(createStripePaymentIntent(orderData))
@@ -1594,14 +1611,14 @@ export default function CheckoutPage() {
       paymentMethod: selectedPaymentMethod,
       total: actualTotal,
       subtotal: subtotal,
-      shipping: shippingCost,
+      shipping: normalizedShippingCost,
       discount: qoynsDiscountAmount + couponDiscountAmount + gigCompletionDiscountAmount + cashWalletDiscountAmount,
       couponCode: appliedCoupon ? appliedCoupon.discountCode : (appliedGigCompletion ? appliedGigCompletion.discountCode : null),
       // Shipping method information (from Jibly API)
-      shippingMethod: selectedShippingMethod?.id || selectedShippingMethod?.methodId,
-      shippingMethodName: selectedShippingMethod?.name || selectedShippingMethod?.methodName,
-      shippingMethodTime: selectedShippingMethod?.deliveryTime || selectedShippingMethod?.estimatedDelivery || selectedShippingMethod?.time,
-      shippingMethodCost: shippingCost
+      shippingMethod: resolvedShippingMethod,
+      shippingMethodName: resolvedShippingMethodName,
+      shippingMethodTime: resolvedShippingMethodTime,
+      shippingMethodCost: normalizedShippingCost
     }
 
     dispatch(placeOrder(orderData))
@@ -1696,8 +1713,7 @@ export default function CheckoutPage() {
         finalDiscountType = 'gig_completion'
       }
 
-      const body = {
-        items: cartItems.map(item => {
+      const checkoutItems = cartItems.map(item => {
           const base = {
             productId: item.productId || item.id,
             name: item.name || 'Product',
@@ -1715,7 +1731,10 @@ export default function CheckoutPage() {
             base.discountAmount = fixedAmt > 0 ? fixedAmt : undefined
           }
           return base
-        }),
+        })
+
+      const body = {
+        items: checkoutItems,
         total: actualTotal,
         subtotal: subtotal,
         discount: qoynsDiscountAmount + couponDiscountAmount + gigCompletionDiscountAmount + cashWalletDiscountAmount,
@@ -1737,11 +1756,11 @@ export default function CheckoutPage() {
         deliveryAddress: selectedAddress, // Include selected delivery address
         shippingAddress: shippingSameAsDelivery ? selectedAddress : null, // Include shipping address
         // Shipping charge and method for payment API
-        shipping: shippingCost,
-        shippingMethod: selectedShippingMethod?.id || selectedShippingMethod?.methodId,
-        shippingMethodName: selectedShippingMethod?.name || selectedShippingMethod?.methodName,
-        shippingMethodTime: selectedShippingMethod?.deliveryTime || selectedShippingMethod?.estimatedDelivery || selectedShippingMethod?.time,
-        shippingMethodCost: shippingCost,
+        shipping: normalizedShippingCost,
+        shippingMethod: resolvedShippingMethod,
+        shippingMethodName: resolvedShippingMethodName,
+        shippingMethodTime: resolvedShippingMethodTime,
+        shippingMethodCost: normalizedShippingCost,
         successUrl: `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${window.location.origin}/checkout`,
         ...(mongoUserId && { mongoUserId }) // Include MongoDB userId if available
@@ -1868,10 +1887,10 @@ export default function CheckoutPage() {
           phone: selectedAddress.phone,
           email: selectedAddress.email
         },
-        shipping: Number(shippingCost),
-        shippingMethod: (selectedShippingMethod?.id || selectedShippingMethod?.methodId || 'standard').toString(),
-        shippingMethodName: selectedShippingMethod?.name || selectedShippingMethod?.methodName || 'Standard Delivery',
-        shippingMethodCost: Number(shippingCost)
+        shipping: normalizedShippingCost,
+        shippingMethod: resolvedShippingMethod,
+        shippingMethodName: resolvedShippingMethodName,
+        shippingMethodCost: normalizedShippingCost
       }
 
       console.log('📡 [CASH WALLET PAYMENT] Calling checkout API:', checkoutPayload)
@@ -2258,6 +2277,11 @@ export default function CheckoutPage() {
                           <div className={styles.addressLocation}>
                             {address.city}, {address.state} {address.postalCode}
                           </div>
+                          {(address.zoneCharge != null || address.charge != null) && (
+                            <div className={styles.addressContact}>
+                              Delivery Charge: AED {Number(address.zoneCharge ?? address.charge).toFixed(2)}
+                            </div>
+                          )}
                           <div className={styles.addressContact}>{address.phone}</div>
                           <div className={styles.addressContact}>{address.email}</div>
                         </div>

@@ -11,6 +11,7 @@ import CategoryCard from '@/components/CategoryCard'
 import InfluencerCard from '@/components/InfluencerCard'
 import FAQ from '@/components/FAQ'
 import Footer from '@/components/Footer'
+import Script from 'next/script'
 import QuickNav from '@/components/QuickNav'
 import StoreCard from '@/components/StoreCard'
 import Image from 'next/image'
@@ -292,7 +293,7 @@ export default function Home() {
   const otherCategoriesSwiperRef = useRef(null);
   const [activeStoreFilter, setActiveStoreFilter] = useState('all');
   const [isMobile, setIsMobile] = useState(false);
-  
+
   // Swiper navigation states
   const [bestsellersNav, setBestsellersNav] = useState({ isBeginning: true, isEnd: false });
   const [offersNav, setOffersNav] = useState({ isBeginning: true, isEnd: false });
@@ -521,7 +522,7 @@ export default function Home() {
   // Helper function to check if homepage sections exist
   const hasHomepageSections = () => {
     if (!homepageSections) return false;
-    
+
     // Check if it's the new grouped structure
     if (typeof homepageSections === 'object' && !Array.isArray(homepageSections)) {
       const brandCount = Array.isArray(homepageSections.brand) ? homepageSections.brand.length : 0;
@@ -530,13 +531,37 @@ export default function Home() {
       const supermarketCount = Array.isArray(homepageSections.supermarket) ? homepageSections.supermarket.length : 0;
       return brandCount + categoriesCount + hypermarketCount + supermarketCount > 0;
     }
-    
+
     // Check if it's the legacy array structure
     return Array.isArray(homepageSections) && homepageSections.length > 0;
   };
 
   return (
     <>
+      {/* WebSite Schema with SearchAction - homepage */}
+      <Script
+        id="website-schema"
+        type="application/ld+json"
+        strategy="afterInteractive"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            '@id': 'https://www.iqliq.ae/#website',
+            url: 'https://www.iqliq.ae/',
+            name: 'IQLIQ',
+            publisher: {
+              '@id': 'https://www.iqliq.ae/#organization',
+            },
+            potentialAction: {
+              '@type': 'SearchAction',
+              target: 'https://www.iqliq.ae/search?q={search_term_string}',
+              'query-input': 'required name=search_term_string',
+            },
+          }),
+        }}
+      />
+
       <Navigation />
       <main className="home-page">
         {/* <QuickNav /> */}
@@ -577,8 +602,9 @@ export default function Home() {
                 spaceBetween={24}
                 breakpoints={{
                   320: { slidesPerView: 1.15, spaceBetween: 12 },
-                  640: { slidesPerView: 2.2, spaceBetween: 16 },
-                  1024: { slidesPerView: 'auto', spaceBetween: 24 },
+                  640: { slidesPerView: 2.6, spaceBetween: 10 },
+                  820: { slidesPerView: 2.8, spaceBetween: 16 },
+                  1024: { slidesPerView: '3.6', spaceBetween: 24 },
                 }}
                 grabCursor={true}
                 freeMode={true}
@@ -631,8 +657,16 @@ export default function Home() {
               <Swiper
                 ref={otherCategoriesSwiperRef}
                 modules={[SwiperNavigation]}
-                slidesPerView={isMobile ? 2.08 : 'auto'}
-                spaceBetween={isMobile ? 12 : 24}
+                slidesPerView={'auto'}
+                spaceBetween={24}
+                breakpoints={{
+                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  640: { slidesPerView: 3, spaceBetween: 10 },
+                  820: { slidesPerView: 3.2, spaceBetween: 16 },
+                  1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                  1360: { slidesPerView: 5.4, spaceBetween: 24 },
+                  1440: { slidesPerView: 6, spaceBetween: 24 },
+                }}
                 grabCursor={true}
                 freeMode={true}
                 onSlideChange={(swiper) => {
@@ -674,7 +708,7 @@ export default function Home() {
 
         <section className="section">
           <div className="container">
-          
+
             {homepageSectionsLoading ? (
               <div style={{ display: 'flex', gap: '24px', overflowX: 'auto', paddingBottom: '8px' }}>
                 {[...Array(4)].map((_, index) => (
@@ -698,7 +732,7 @@ export default function Home() {
                 {/* Map Brand Sections */}
                 {homepageSections.brand && Array.isArray(homepageSections.brand) && homepageSections.brand.map((section) => {
                   const level4CategoryIds = section.config?.level4Categories?.map(cat => cat._id) || [];
-                  
+
                   return (
                     <SwiperSlide key={section._id} style={{ width: 'auto' }}>
                       <BrandOfferCard
@@ -713,11 +747,11 @@ export default function Home() {
                     </SwiperSlide>
                   );
                 })}
-                
+
                 {/* Map Category Sections */}
                 {homepageSections.categories && Array.isArray(homepageSections.categories) && homepageSections.categories.map((section) => {
                   const level4CategoryIds = section.config?.level4Categories?.map(cat => cat._id) || [];
-                  
+
                   return (
                     <SwiperSlide key={section._id} style={{ width: 'auto' }}>
                       <BrandOfferCard
@@ -732,11 +766,11 @@ export default function Home() {
                     </SwiperSlide>
                   );
                 })}
-                
+
                 {/* Map Hypermarket Sections */}
                 {homepageSections.hypermarket && Array.isArray(homepageSections.hypermarket) && homepageSections.hypermarket.map((section) => {
                   const level4CategoryIds = section.config?.level4Categories?.map(cat => cat._id) || [];
-                  
+
                   // Transform hypermarket stores to match category format
                   const hypermarketStoresAsCategories = section.config?.hypermarketStores?.map(store => ({
                     _id: store._id,
@@ -745,7 +779,7 @@ export default function Home() {
                     logo: store.logo,
                     slug: store.slug
                   })) || [];
-                  
+
                   return (
                     <SwiperSlide key={section._id} style={{ width: 'auto' }}>
                       <BrandOfferCard
@@ -760,11 +794,11 @@ export default function Home() {
                     </SwiperSlide>
                   );
                 })}
-                
+
                 {/* Map Supermarket Sections */}
                 {homepageSections.supermarket && Array.isArray(homepageSections.supermarket) && homepageSections.supermarket.map((section) => {
                   const level4CategoryIds = section.config?.level4Categories?.map(cat => cat._id) || [];
-                  
+
                   // Transform supermarket stores to match category format
                   const supermarketStoresAsCategories = section.config?.supermarketStores?.map(store => ({
                     _id: store._id,
@@ -773,7 +807,7 @@ export default function Home() {
                     logo: store.logo,
                     slug: store.slug
                   })) || [];
-                  
+
                   return (
                     <SwiperSlide key={section._id} style={{ width: 'auto' }}>
                       <BrandOfferCard
@@ -801,50 +835,50 @@ export default function Home() {
                 className="offers-swiper"
               >
                 {homepageSections.map((section) => {
-                  const hasHypermarketStores = section.config?.hypermarketStores && 
+                  const hasHypermarketStores = section.config?.hypermarketStores &&
                     Array.isArray(section.config.hypermarketStores) &&
                     section.config.hypermarketStores.length > 0;
-                  
-                  const hasSupermarketStores = section.config?.supermarketStores && 
+
+                  const hasSupermarketStores = section.config?.supermarketStores &&
                     Array.isArray(section.config.supermarketStores) &&
                     section.config.supermarketStores.length > 0;
-                  
-                  const hypermarketStoresAsCategories = hasHypermarketStores 
+
+                  const hypermarketStoresAsCategories = hasHypermarketStores
                     ? section.config.hypermarketStores.map(store => ({
-                        _id: store._id,
-                        name: store.name,
-                        icon: store.logo,
-                        logo: store.logo,
-                        slug: store.slug
-                      }))
+                      _id: store._id,
+                      name: store.name,
+                      icon: store.logo,
+                      logo: store.logo,
+                      slug: store.slug
+                    }))
                     : [];
-                  
-                  const supermarketStoresAsCategories = hasSupermarketStores 
+
+                  const supermarketStoresAsCategories = hasSupermarketStores
                     ? section.config.supermarketStores.map(store => ({
-                        _id: store._id,
-                        name: store.name,
-                        icon: store.logo,
-                        logo: store.logo,
-                        slug: store.slug
-                      }))
+                      _id: store._id,
+                      name: store.name,
+                      icon: store.logo,
+                      logo: store.logo,
+                      slug: store.slug
+                    }))
                     : [];
-                  
-                  const categoriesToUse = hasHypermarketStores 
-                    ? hypermarketStoresAsCategories 
+
+                  const categoriesToUse = hasHypermarketStores
+                    ? hypermarketStoresAsCategories
                     : hasSupermarketStores
-                    ? supermarketStoresAsCategories
-                    : (section.config?.level4Categories || []);
-                  
-                  const itemType = hasHypermarketStores 
-                    ? 'hypermarket' 
+                      ? supermarketStoresAsCategories
+                      : (section.config?.level4Categories || []);
+
+                  const itemType = hasHypermarketStores
+                    ? 'hypermarket'
                     : hasSupermarketStores
-                    ? 'supermarket'
-                    : (section.config?.brands && section.config.brands.length > 0)
-                    ? 'brand'
-                    : 'category';
-                  
+                      ? 'supermarket'
+                      : (section.config?.brands && section.config.brands.length > 0)
+                        ? 'brand'
+                        : 'category';
+
                   const level4CategoryIds = section.config?.level4Categories?.map(cat => cat._id) || [];
-                  
+
                   return (
                     <SwiperSlide key={section._id} style={{ width: 'auto' }}>
                       <BrandOfferCard
@@ -904,8 +938,16 @@ export default function Home() {
               <Swiper
                 ref={topBrandsSwiperRef}
                 modules={[SwiperNavigation]}
-                slidesPerView={isMobile ? 2.08 : 'auto'}
-                spaceBetween={isMobile ? 12 : 24}
+                slidesPerView={'auto'}
+                spaceBetween={24}
+                breakpoints={{
+                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  640: { slidesPerView: 3, spaceBetween: 10 },
+                  820: { slidesPerView: 3.2, spaceBetween: 16 },
+                  1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                  1360: { slidesPerView: 5.4, spaceBetween: 24 },
+                  1440: { slidesPerView: 6, spaceBetween: 24 },
+                }}
                 grabCursor={true}
                 freeMode={true}
                 onSlideChange={(swiper) => {
@@ -996,8 +1038,16 @@ export default function Home() {
               <Swiper
                 ref={topStoresSwiperRef}
                 modules={[SwiperNavigation]}
-                slidesPerView={isMobile ? 2.08 : 'auto'}
-                spaceBetween={isMobile ? 12 : 24}
+                slidesPerView={'auto'}
+                spaceBetween={24}
+                breakpoints={{
+                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  640: { slidesPerView: 3, spaceBetween: 10 },
+                  820: { slidesPerView: 3.2, spaceBetween: 16 },
+                  1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                  1360: { slidesPerView: 5.4, spaceBetween: 24 },
+                  1440: { slidesPerView: 6, spaceBetween: 24 },
+                }}
                 grabCursor={true}
                 freeMode={true}
                 onSlideChange={(swiper) => {
@@ -1042,8 +1092,9 @@ export default function Home() {
               spaceBetween={24}
               breakpoints={{
                 320: { slidesPerView: 1.15, spaceBetween: 12 },
-                640: { slidesPerView: 2.2, spaceBetween: 16 },
-                1024: { slidesPerView: 'auto', spaceBetween: 24 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: 3.6, spaceBetween: 24 },
               }}
               grabCursor={true}
               freeMode={true}
@@ -1095,8 +1146,16 @@ export default function Home() {
               <Swiper
                 ref={popularCategoriesSwiperRef}
                 modules={[SwiperNavigation]}
-                slidesPerView={isMobile ? 2.08 : 'auto'}
-                spaceBetween={isMobile ? 12 : 24}
+                slidesPerView={'auto'}
+                spaceBetween={24}
+                breakpoints={{
+                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  640: { slidesPerView: 3, spaceBetween: 10 },
+                  820: { slidesPerView: 3.2, spaceBetween: 16 },
+                  1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                  1360: { slidesPerView: 5.4, spaceBetween: 24 },
+                  1440: { slidesPerView: 6, spaceBetween: 24 },
+                }}
                 grabCursor={true}
                 freeMode={true}
                 onSlideChange={(swiper) => {
@@ -1142,8 +1201,8 @@ export default function Home() {
             <SectionHeader
               title="New Stores on IQLIQ"
               showNavigation={true}
-              onPrev={handlePrev}
-              onNext={handleNext}
+              onPrev={handleNewStoresPrev}
+              onNext={handleNewStoresNext}
               showButton={false}
               buttonText={""}
               onButtonClick={() => { }}
@@ -1164,8 +1223,16 @@ export default function Home() {
               <Swiper
                 ref={newStoresSwiperRef}
                 modules={[SwiperNavigation]}
-                slidesPerView={isMobile ? 2.08 : 'auto'}
-                spaceBetween={isMobile ? 12 : 24}
+                slidesPerView={'auto'}
+                spaceBetween={24}
+                breakpoints={{
+                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  640: { slidesPerView: 3, spaceBetween: 10 },
+                  820: { slidesPerView: 3.2, spaceBetween: 16 },
+                  1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                  1360: { slidesPerView: 5.4, spaceBetween: 24 },
+                  1440: { slidesPerView: 6, spaceBetween: 24 },
+                }}
                 grabCursor={true}
                 freeMode={true}
                 onSlideChange={(swiper) => {
@@ -1182,7 +1249,7 @@ export default function Home() {
                 }}
                 className="other-categories-swiper"
               >
-                {transformedNewStores.reverse().map((store, index) => (
+                {[...transformedNewStores].reverse().map((store, index) => (
                   <SwiperSlide key={store.name || index} style={{ width: 'auto' }}>
                     <CategoryCard name={store.name} image={store.image} onClick={() => handleStoreClick(store)} />
                   </SwiperSlide>

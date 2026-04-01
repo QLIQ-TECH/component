@@ -330,13 +330,23 @@ button {
   justify-content: flex-start;
 }
 
-@media (min-width: 769px) {
+@media (min-width: 1201px) {
   .bestseller-slide {
     width: auto !important;
     display: flex;
     justify-content: flex-start;
     padding-left: 0;
     padding-right: 0;
+  }
+}
+
+@media (max-width: 1200px) and (min-width: 769px) {
+  .bestseller-slide {
+    display: flex;
+    justify-content: flex-start;
+    padding-left: 0;
+    padding-right: 0;
+    /* allowing swiper to control width here */
   }
 }
 
@@ -385,13 +395,53 @@ button {
   padding-right: 24px;
 }
 
-@media (max-width: 1200px) {
+/* Desktop and tablets maintain 4 columns for stores page */
+@media (max-width: 1200px) and (min-width: 768px) {
   .stores-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
   }
 }
 
-@media (max-width: 768px) {
+/* iPad tablet styling for store page. Display as slider (3 items) just like best & cheap deals */
+@media (max-width: 1024px) and (min-width: 768px) {
+  .stores-grid {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 16px;
+    justify-content: flex-start;
+    padding-bottom: 8px;
+    padding-left: 0;
+    padding-right: 0;
+    margin: 0 auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+  }
+  
+  .stores-grid::-webkit-scrollbar {
+    display: none;
+  }
+  
+  @supports (-ms-overflow-style: none) {
+    .stores-grid {
+      -ms-overflow-style: none; /* IE and Edge */
+      scrollbar-width: none; /* Firefox */
+    }
+  }
+
+  .stores-grid .store-card,
+  .stores-grid > div {
+    flex: 0 0 calc((100% - 32px) / 3);
+    max-width: calc((100% - 32px) / 3);
+    scroll-snap-align: start;
+    font-size: 1rem;
+    padding: 0;
+  }
+}
+
+@media (max-width: 767px) {
   .stores-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 16px;

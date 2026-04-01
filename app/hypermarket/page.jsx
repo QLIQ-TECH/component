@@ -73,7 +73,7 @@ export default function Home() {
   const { hypermarketStores, fastestDeliveryStores, bestCheapDeals, bestBundleDeals, loading, loadingBestCheapDeals, loadingBestBundleDeals, error } = useSelector(state => state.stores)
   const { products, categoryProducts = [], categoryProductsLoading } = useSelector(state => state.products)
   const [userLocation, setUserLocation] = useState(null)
-  
+
   // Swiper navigation states
   const [fastestDeliveryNav, setFastestDeliveryNav] = useState({ isBeginning: true, isEnd: false })
   const [bestCheapDealsNav, setBestCheapDealsNav] = useState({ isBeginning: true, isEnd: false })
@@ -256,8 +256,14 @@ export default function Home() {
             <Swiper
               ref={fastestDeliverySwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={'auto'}
+              spaceBetween={24}
+              breakpoints={{
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
+              }}
               grabCursor={true}
               freeMode={true}
               onSlideChange={(swiper) => {
@@ -321,8 +327,14 @@ export default function Home() {
             <Swiper
               ref={bestCheapDealsSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={'auto'}
+              spaceBetween={24}
+              breakpoints={{
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
+              }}
               grabCursor={true}
               freeMode={true}
               onSlideChange={(swiper) => {
@@ -345,15 +357,15 @@ export default function Home() {
                 if (store.level1) {
                   const level1Name = store.level1?.name || store.level1;
                   if (typeof level1Name === 'string') {
-                    categoryName = level1Name.toLowerCase().includes('hypermarket') || 
-                                 level1Name.toLowerCase().includes('hyper') 
-                                 ? 'Hypermarket' 
-                                 : level1Name;
+                    categoryName = level1Name.toLowerCase().includes('hypermarket') ||
+                      level1Name.toLowerCase().includes('hyper')
+                      ? 'Hypermarket'
+                      : level1Name;
                   }
                 } else if (store.category) {
                   categoryName = store.category?.name || store.category;
                 }
-                
+
                 return (
                   <SwiperSlide key={store._id || store.id || `store-${index}`} className="bestseller-slide">
                     <StoreCard
@@ -402,8 +414,14 @@ export default function Home() {
             <Swiper
               ref={bestBundlesSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={isMobile ? 1.2 : 'auto'}
-              spaceBetween={isMobile ? 16 : 24}
+              slidesPerView={'auto'}
+              spaceBetween={24}
+              breakpoints={{
+                320: { slidesPerView: 1.15, spaceBetween: 12 },
+                640: { slidesPerView: 2.6, spaceBetween: 10 },
+                820: { slidesPerView: 2.8, spaceBetween: 16 },
+                1024: { slidesPerView: '3.6', spaceBetween: 24 },
+              }}
               grabCursor={true}
               freeMode={true}
               onSlideChange={(swiper) => {
@@ -426,15 +444,15 @@ export default function Home() {
                 if (store.level1) {
                   const level1Name = store.level1?.name || store.level1;
                   if (typeof level1Name === 'string') {
-                    categoryName = level1Name.toLowerCase().includes('hypermarket') || 
-                                 level1Name.toLowerCase().includes('hyper') 
-                                 ? 'Hypermarket' 
-                                 : level1Name;
+                    categoryName = level1Name.toLowerCase().includes('hypermarket') ||
+                      level1Name.toLowerCase().includes('hyper')
+                      ? 'Hypermarket'
+                      : level1Name;
                   }
                 } else if (store.category) {
                   categoryName = store.category?.name || store.category;
                 }
-                
+
                 return (
                   <SwiperSlide key={store._id || store.id || `store-${index}`} className="bestseller-slide">
                     <StoreCard

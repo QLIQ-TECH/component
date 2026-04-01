@@ -1677,7 +1677,7 @@ export default function BrandPage() {
             font-size: 14px !important;
             border-radius: 25px !important;
           }
-
+ 
           .grid-mobile-column {
             display: flex;
             flex-direction: column;
@@ -1713,12 +1713,17 @@ export default function BrandPage() {
         .content-area { 
           flex: 1;
           min-width: 0; /* allows flex item to shrink below content size */
+          width: 100%;
+          max-width: 100%;
         }
         
         .products-scroll-container {
           width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
           max-height: calc(100vh - 200px);
           overflow-y: auto;
+          overflow-x: hidden;
           padding-right: 8px; /* space for scrollbar */
            /* Hide scrollbar, keep scroll functionality */
            -ms-overflow-style: none; /* IE and Edge */
@@ -1737,6 +1742,9 @@ export default function BrandPage() {
         .grid-item { 
           display: flex; 
           justify-content: center; 
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
         }
 
         .loading-container {
@@ -1825,18 +1833,8 @@ export default function BrandPage() {
         }
 
         @media (max-width: 1024px) {
-          .listing-layout { 
-            flex-direction: column; 
-            gap: 16px;
-          }
-          
           .filters-sidebar { 
-            position: relative; 
-            top: 0; 
-            width: 100%; 
-            z-index: 1;
-            max-height: none;
-            overflow-y: visible;
+            width: 220px; 
           }
           
           .grid-3 { 
@@ -1855,12 +1853,13 @@ export default function BrandPage() {
         .section-header {
           display: flex;
           width: 100%;
+          box-sizing: border-box;
           max-width: 1392px;
           justify-content: flex-end;
           align-items: center;
           margin-bottom: 24px;
-          padding-right: 24px;
-          padding-left: 24px;
+          padding-right: 0;
+          padding-left: 0;
         }
 
         .section-actions {
@@ -1869,6 +1868,7 @@ export default function BrandPage() {
           justify-content: flex-end;
           gap: 16px;
           margin-left: auto;
+          flex-wrap: wrap;
         }
 
         .sticky-header {
@@ -1878,7 +1878,7 @@ export default function BrandPage() {
           background: #ffffff;
         }
 
-        @media (max-width: 768px) {
+        @media (max-width: 767px) {
           .section-header {
             justify-content: flex-start;
           }

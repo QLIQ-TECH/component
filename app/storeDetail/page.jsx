@@ -247,6 +247,10 @@ export default function StoreDetail() {
           gap: 24px;
           align-items: flex-start;
           min-height: calc(100vh - 200px);
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          overflow-x: hidden;
         }
         
         .filters-sidebar {
@@ -271,9 +275,12 @@ export default function StoreDetail() {
         
         .products-scroll-container {
           width: 100%;
+          max-width: 100%;
           max-height: calc(100vh - 200px);
           overflow-y: auto;
+          overflow-x: hidden;
           padding-right: 8px; /* space for scrollbar */
+          box-sizing: border-box;
            /* Hide scrollbar, keep scroll functionality */
            -ms-overflow-style: none; /* IE and Edge */
            scrollbar-width: none; /* Firefox */
@@ -395,6 +402,17 @@ export default function StoreDetail() {
         }
 
         @media (max-width: 1024px) {
+          .filters-sidebar { 
+            width: 220px; 
+          }
+          
+          .grid-3 { 
+            grid-template-columns: repeat(2, minmax(0, 1fr)); 
+            gap: 16px;
+          }
+        }
+        
+        @media (max-width: 767px) {
           .listing-layout { 
             flex-direction: column; 
             gap: 16px;
@@ -407,11 +425,6 @@ export default function StoreDetail() {
             z-index: 1;
             max-height: none;
             overflow-y: visible;
-          }
-          
-          .grid-3 { 
-            grid-template-columns: repeat(2, minmax(0, 1fr)); 
-            gap: 16px;
           }
         }
         

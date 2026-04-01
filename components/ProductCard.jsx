@@ -313,7 +313,9 @@ export default function ProductCard({
           display: flex;
           flex-direction: column;
           align-items: stretch;
-          width: 322px;
+          width: 100%;
+          min-width: 0;
+          max-width: 322px;
           min-height: 490px;
           gap: 16px;
           position: relative;
@@ -543,9 +545,27 @@ export default function ProductCard({
           line-height: 150%;
         }
 
-        @media (max-width: 768px) {
-        .product-card {
-          display: flex;
+        @media (max-width: 1200px) and (min-width: 768px) {
+          .product-card {
+            width: 250px;
+            min-height: 400px;
+          }
+          .product-image {
+            height: 250px;
+            padding: 12px;
+          }
+          .product-image img {
+            max-width: 200px;
+            max-height: 200px;
+          }
+          .product-title {
+            font-size: 14px;
+          }
+        }
+
+        @media (max-width: 767px) {
+          .product-card {
+            display: flex;
           flex-direction: column;
           align-items: flex-start;
           width: 100%;
