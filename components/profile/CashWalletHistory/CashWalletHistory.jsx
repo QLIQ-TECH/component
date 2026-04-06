@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import styles from './cashWalletHistory.module.css'
 import { wallet } from '@/store/api/endpoints'
-import { decryptText } from '@/utils/crypto'
+import { decryptText } from '@/utils/crypto' 
 
 const getToken = async () => {
   let token = ''

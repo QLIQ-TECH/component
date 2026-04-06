@@ -64,44 +64,72 @@ export default function NewAddress({ onCancel, onSave }) {
     return countryCodeMap[countryName] || countryName?.toLowerCase().slice(0, 2) || null
   }
 
-  // Load Google Maps API with Places library - optimized version
+  // Load Google Maps Places: works when another screen (e.g. LocationModal) already
+  // injected the bootstrap script with loading=async but without libraries=places.
   const loadGoogleMaps = () => {
     return new Promise((resolve, reject) => {
-      // Check if Google Maps is already loaded
-      if (window.google && window.google.maps && window.google.maps.places) {
+      const hasPlaces = () =>
+        Boolean(window.google?.maps?.places && window.google.maps.places.Autocomplete)
+
+      if (hasPlaces()) {
         resolve()
         return
       }
 
-      // Check if script is already being loaded
-      const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`)
-      if (existingScript) {
-        // Use event listener instead of polling for better performance
-        const checkLoaded = () => {
-          if (window.google && window.google.maps && window.google.maps.places) {
-            resolve()
-          } else {
-            // Fallback: check after a short delay if event didn't fire
-            setTimeout(() => {
-              if (window.google && window.google.maps && window.google.maps.places) {
-                resolve()
-              }
-            }, 50)
-          }
+      const ensurePlacesLibrary = async () => {
+        if (hasPlaces()) return
+        if (window.google?.maps?.importLibrary) {
+          await window.google.maps.importLibrary('places')
         }
-        existingScript.addEventListener('load', checkLoaded)
-        // Also check immediately in case it's already loaded
-        checkLoaded()
+        if (!hasPlaces()) {
+          throw new Error('Google Places library unavailable')
+        }
+      }
+
+      const existingScript = document.querySelector('script[src*="maps.googleapis.com"]')
+      if (existingScript) {
+        let attempts = 0
+        let settled = false
+        const maxAttempts = 200
+        const interval = setInterval(async () => {
+          if (settled) return
+          attempts += 1
+          try {
+            if (!window.google?.maps) {
+              if (attempts >= maxAttempts) {
+                settled = true
+                clearInterval(interval)
+                reject(new Error('Timeout waiting for Google Maps'))
+              }
+              return
+            }
+            await ensurePlacesLibrary()
+            if (settled) return
+            settled = true
+            clearInterval(interval)
+            resolve()
+          } catch (e) {
+            if (attempts >= maxAttempts) {
+              settled = true
+              clearInterval(interval)
+              reject(e)
+            }
+          }
+        }, 100)
         return
       }
 
-      // Load Google Maps script
       const script = document.createElement('script')
       script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_API_KEY}&libraries=places`
       script.async = true
       script.defer = true
-      script.onload = () => {
-        resolve()
+      script.onload = async () => {
+        try {
+          await ensurePlacesLibrary()
+          resolve()
+        } catch (e) {
+          reject(e)
+        }
       }
       script.onerror = () => {
         console.error('Failed to load Google Maps')

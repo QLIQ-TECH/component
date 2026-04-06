@@ -345,7 +345,7 @@ export const subscription = {
   webSubscription: `${BASES.subPayment}/wallet/web-subscription`,
 }
 
-const WALLET_USER_BASE = process.env.NEXT_PUBLIC_WALLET_USER_BASE_URL || 'https://wallet.iqliq.ae/api'
+const WALLET_USER_BASE = process.env.NEXT_PUBLIC_WALLET_BASE_URL || 'https://backendwallet.qliq.ae/api'
 
 export const wallet = {
   base: BASES.wallet,
