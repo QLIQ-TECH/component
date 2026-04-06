@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import LoadingScreen from './LoadingScreen'
+import BotContainer from './BotContainer'
 
 export default function ClientWrapper({ children }) {
   const { isInitialized } = useAuth()
@@ -17,5 +18,10 @@ export default function ClientWrapper({ children }) {
     return <LoadingScreen />
   }
 
-  return children
+  return (
+    <>
+      {children}
+      <BotContainer />
+    </>
+  )
 }

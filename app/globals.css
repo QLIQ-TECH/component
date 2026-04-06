@@ -658,7 +658,4 @@ button {
   margin-top: 2px;
 }
 
-/* Hide Google branding if needed, or style it */
-.pac-logo::after {
-  display: none;
-}
+/* Sticky Bot Styling moved to component */
