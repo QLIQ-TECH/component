@@ -49,13 +49,13 @@ export default function DiscoveryPage() {
       try {
         setLoading(true)
         const response = await fetch('http://localhost:8082/api/stores/discovery')
-        
+
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`)
         }
-        
+
         const data = await response.json()
-        
+
         if (data.success && data.data) {
           setNewStores(data.data.newStores || [])
           setTopStores(data.data.topStores || [])
@@ -217,6 +217,14 @@ export default function DiscoveryPage() {
                   modules={[SwiperNavigation]}
                   slidesPerView="auto"
                   spaceBetween={24}
+                  breakpoints={{
+                    320: { slidesPerView: 2.30, spaceBetween: 12 },
+                    640: { slidesPerView: 3, spaceBetween: 10 },
+                    820: { slidesPerView: 3.2, spaceBetween: 16 },
+                    1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                    1360: { slidesPerView: 5.4, spaceBetween: 24 },
+                    1440: { slidesPerView: 6, spaceBetween: 24 },
+                  }}
                   grabCursor={true}
                   freeMode={true}
                   onSlideChange={(swiper) => {

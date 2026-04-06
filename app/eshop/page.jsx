@@ -68,7 +68,7 @@ const transformBrandData = (apiBrand) => {
 const transformCategoryData = (apiCategory) => {
   // Use icon from API if available, otherwise use default placeholder
   const imageUrl = apiCategory.icon || 'https://api.builder.io/api/v1/image/assets/TEMP/12ba4121022e746495773eb8df2e6b4add90148f?width=412';
-  
+
   return {
     id: apiCategory._id,
     name: apiCategory.name || 'Category Name',
@@ -114,7 +114,7 @@ export default function Home() {
   const [activeStoreFilter, setActiveStoreFilter] = useState('all');
   const [selectedFilters, setSelectedFilters] = useState({});
   const [isMobile, setIsMobile] = useState(false);
-  
+
   // Swiper navigation states
   const [bestsellersNav, setBestsellersNav] = useState({ isBeginning: true, isEnd: false });
   const [offersNav, setOffersNav] = useState({ isBeginning: true, isEnd: false });
@@ -377,7 +377,7 @@ export default function Home() {
                 ref={bestsellersSwiperRef}
                 modules={[SwiperNavigation]}
                 slidesPerView={'auto'}
-                spaceBetween={ 24}
+                spaceBetween={24}
                 breakpoints={{
                   320: { slidesPerView: 1.15, spaceBetween: 12 },
                   640: { slidesPerView: 2.6, spaceBetween: 10 },
@@ -433,13 +433,15 @@ export default function Home() {
               <Swiper
                 ref={categoriesSwiperRef}
                 modules={[SwiperNavigation]}
-                slidesPerView={ 'auto'}
-                spaceBetween={ 24}
+                slidesPerView={'auto'}
+                spaceBetween={24}
                 breakpoints={{
-                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  320: { slidesPerView: 2.30, spaceBetween: 12 },
                   640: { slidesPerView: 3, spaceBetween: 10 },
                   820: { slidesPerView: 3.2, spaceBetween: 16 },
                   1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                  1360: { slidesPerView: 5.4, spaceBetween: 24 },
+                  1440: { slidesPerView: 6, spaceBetween: 24 },
                 }}
                 grabCursor={true}
                 freeMode={true}
@@ -481,8 +483,8 @@ export default function Home() {
             <Swiper
               ref={offersSwiperRef}
               modules={[SwiperNavigation]}
-              slidesPerView={ 'auto'}
-              spaceBetween={ 24}
+              slidesPerView={'auto'}
+              spaceBetween={24}
               breakpoints={{
                 320: { slidesPerView: 1.15, spaceBetween: 12 },
                 640: { slidesPerView: 2.6, spaceBetween: 10 },
@@ -567,12 +569,14 @@ export default function Home() {
                 ref={topBrandsSwiperRef}
                 modules={[SwiperNavigation]}
                 slidesPerView={'auto'}
-                spaceBetween={ 24}
+                spaceBetween={24}
                 breakpoints={{
-                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  320: { slidesPerView: 2.30, spaceBetween: 12 },
                   640: { slidesPerView: 3, spaceBetween: 10 },
                   820: { slidesPerView: 3.2, spaceBetween: 16 },
                   1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                  1360: { slidesPerView: 5.4, spaceBetween: 24 },
+                  1440: { slidesPerView: 6, spaceBetween: 24 },
                 }}
                 grabCursor={true}
                 freeMode={true}
@@ -616,7 +620,7 @@ export default function Home() {
               ref={featuredOffersSwiperRef}
               modules={[SwiperNavigation]}
               slidesPerView={'auto'}
-              spaceBetween={ 24}
+              spaceBetween={24}
               breakpoints={{
                 320: { slidesPerView: 1.15, spaceBetween: 12 },
                 640: { slidesPerView: 2.6, spaceBetween: 10 },
@@ -689,8 +693,8 @@ export default function Home() {
         {/* Level 3 Categories Section */}
         <section className="section">
           <div className="container">
-            <SectionHeader 
-              title="Popular Categories" 
+            <SectionHeader
+              title="Popular Categories"
               showNavigation={true}
               onPrev={handleLevel3CategoriesPrev}
               onNext={handleLevel3CategoriesNext}
@@ -710,12 +714,14 @@ export default function Home() {
                 ref={level3CategoriesSwiperRef}
                 modules={[SwiperNavigation]}
                 slidesPerView={'auto'}
-                spaceBetween={ 24}
+                spaceBetween={24}
                 breakpoints={{
-                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  320: { slidesPerView: 2.30, spaceBetween: 12 },
                   640: { slidesPerView: 3, spaceBetween: 10 },
                   820: { slidesPerView: 3.2, spaceBetween: 16 },
                   1024: { slidesPerView: 4.2, spaceBetween: 24 },
+                  1360: { slidesPerView: 5.4, spaceBetween: 24 },
+                  1440: { slidesPerView: 6, spaceBetween: 24 },
                 }}
                 grabCursor={true}
                 freeMode={true}

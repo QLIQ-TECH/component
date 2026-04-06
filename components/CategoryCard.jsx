@@ -21,8 +21,8 @@ export default function CategoryCard({ name, image, onClick }) {
       <Image
         src={image}
         alt={name}
-        width={isMobile ? 160 : 206}
-        height={isMobile ? 160 : 206}
+        width={isMobile ? 140 : 206}
+        height={isMobile ? 140 : 206}
         style={{ borderRadius: '16px' }}
       />
       <div className="category-name">
@@ -38,8 +38,8 @@ export default function CategoryCard({ name, image, onClick }) {
           background: rgba(247, 247, 247, 0.00);
           cursor: pointer;
           transition: all 0.2s ease;
-          padding: 16px;
-          min-width: ${isMobile ? '192px' : '238px'};
+          padding: ${isMobile ? '10px' : '16px'};
+          min-width: ${isMobile ? '150px' : '238px'};
         }
 
         .category-name {

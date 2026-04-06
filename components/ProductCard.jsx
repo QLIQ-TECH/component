@@ -579,7 +579,7 @@ export default function ProductCard({
         
         .product-image {
           width: 100%;
-          height: 180px;
+          height: auto;
           border-radius: 10px;
           border: 1px solid rgba(0, 0, 0, 0.08);
           background-size: cover;
@@ -589,14 +589,15 @@ export default function ProductCard({
           display: flex;
           align-items: center;
           justify-content: center;
+          padding: 12px;
           background-color: #fff;
         }
         
         .product-image img {
           width: 100%;
           height: 100%;
-          max-width: 160px;
-          max-height: 160px;
+          max-width: 100%;
+          max-height: 100%;
           object-fit: contain;
         }
 

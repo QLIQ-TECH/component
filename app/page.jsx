@@ -660,7 +660,7 @@ export default function Home() {
                 slidesPerView={'auto'}
                 spaceBetween={24}
                 breakpoints={{
-                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  320: { slidesPerView: 2.30, spaceBetween: 12 },
                   640: { slidesPerView: 3, spaceBetween: 10 },
                   820: { slidesPerView: 3.2, spaceBetween: 16 },
                   1024: { slidesPerView: 4.2, spaceBetween: 24 },
@@ -684,7 +684,7 @@ export default function Home() {
                 className="other-categories-swiper"
               >
                 {(transformedLevel2Categories.length > 0 ? transformedLevel2Categories : categoryData).map((category, index) => (
-                  <SwiperSlide key={category.name || index} style={{ width: 'auto' }}>
+                  <SwiperSlide key={category.name || index}>
                     <CategoryCard {...category} onClick={() => handleCategoryClick(category)} />
                   </SwiperSlide>
                 ))}
@@ -941,7 +941,7 @@ export default function Home() {
                 slidesPerView={'auto'}
                 spaceBetween={24}
                 breakpoints={{
-                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  320: { slidesPerView: 2.30, spaceBetween: 12 },
                   640: { slidesPerView: 3, spaceBetween: 10 },
                   820: { slidesPerView: 3.2, spaceBetween: 16 },
                   1024: { slidesPerView: 4.2, spaceBetween: 24 },
@@ -1041,7 +1041,7 @@ export default function Home() {
                 slidesPerView={'auto'}
                 spaceBetween={24}
                 breakpoints={{
-                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  320: { slidesPerView: 2.30, spaceBetween: 12 },
                   640: { slidesPerView: 3, spaceBetween: 10 },
                   820: { slidesPerView: 3.2, spaceBetween: 16 },
                   1024: { slidesPerView: 4.2, spaceBetween: 24 },
@@ -1149,7 +1149,7 @@ export default function Home() {
                 slidesPerView={'auto'}
                 spaceBetween={24}
                 breakpoints={{
-                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  320: { slidesPerView: 2.30, spaceBetween: 12 },
                   640: { slidesPerView: 3, spaceBetween: 10 },
                   820: { slidesPerView: 3.2, spaceBetween: 16 },
                   1024: { slidesPerView: 4.2, spaceBetween: 24 },
@@ -1226,7 +1226,7 @@ export default function Home() {
                 slidesPerView={'auto'}
                 spaceBetween={24}
                 breakpoints={{
-                  320: { slidesPerView: 1.15, spaceBetween: 12 },
+                  320: { slidesPerView: 2.30, spaceBetween: 12 },
                   640: { slidesPerView: 3, spaceBetween: 10 },
                   820: { slidesPerView: 3.2, spaceBetween: 16 },
                   1024: { slidesPerView: 4.2, spaceBetween: 24 },
