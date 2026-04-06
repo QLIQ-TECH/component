@@ -1,6 +1,6 @@
 ## QLIQ Marketplace - Next.js Implementation
 
-This is a Next.js implementation of the QLIQ marketplace design based on the provided Figma design.
+This is a Next.js implementation of the QLIQ marketplace design based on the provided Figma design...
 
 ## Features
 
